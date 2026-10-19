@@ -49,6 +49,53 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    function validProjectFields(data) {
+      return data.name is string
+        && data.name.trim().size() >= 3 && data.name.size() <= 80
+        && data.description is string && data.description.size() <= 1000;
+    }
+
+    function projectOwner(projectId) {
+      return get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId;
+    }
+
+    match /projects/{projectId} {
+      function isMember() {
+        return request.auth.uid in resource.data.memberIds;
+      }
+      function isOwner() {
+        return request.auth.uid == resource.data.ownerId;
+      }
+
+      // A missing project can be "read" (it returns nothing), so the app can tell 404 from 403.
+      allow get: if signedIn() && (resource == null || isMember());
+      // Queries must be limited to the user's own projects (where memberIds array-contains uid).
+      allow list: if signedIn() && isMember();
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'description', 'ownerId', 'memberIds', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['name', 'description', 'ownerId', 'memberIds', 'createdAt', 'updatedAt'])
+        && validProjectFields(request.resource.data)
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.memberIds == [request.auth.uid]
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      // Owner only, and only name / description for now (members are managed in phase 5).
+      allow update: if signedIn() && isOwner()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'updatedAt'])
+        && validProjectFields(request.resource.data)
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if signedIn() && isOwner();
+
+      // Temporary: the owner can read and delete tasks so deleting a project can clear them.
+      // Full task permissions arrive in phase 4.
+      match /tasks/{taskId} {
+        allow read, delete: if signedIn() && projectOwner(projectId) == request.auth.uid;
+      }
+    }
+
     // Anything not matched above stays closed.
     match /{document=**} {
       allow read, write: if false;
