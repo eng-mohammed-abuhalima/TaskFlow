@@ -465,6 +465,13 @@
   }
 }
 
+/* User-written text (project names, task titles…) may be English in the Arabic UI or the reverse.
+   Each paragraph takes its direction from its own first strong letter, so punctuation lands on the
+   right side, while alignment still follows the page. */
+@utility user-text {
+  unicode-bidi: plaintext;
+}
+
 /* Grows the hit area of small controls to 44x44 without changing layout. */
 @utility touch-target {
   position: relative;
