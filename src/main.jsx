@@ -10,12 +10,18 @@ import '@fontsource/ibm-plex-sans-arabic/600.css';
 import '@fontsource-variable/readex-pro';             // "Readex Pro Variable" 160–700, Latin + Arabic
 import './index.css';
 
+import { PreferencesProvider } from './context/PreferencesContext.jsx';
+import { AuthProvider } from './context/AuthContext.jsx';
 import App from './App.jsx';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      <PreferencesProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </PreferencesProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

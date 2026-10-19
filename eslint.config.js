@@ -19,8 +19,9 @@ export default defineConfig([
     },
   },
   {
-    // Design-system files export class maps and helpers next to their components on purpose.
-    files: ['src/components/**/*.jsx', 'src/lib/**/*.jsx'],
+    // Design-system files export class maps and helpers next to their components on purpose;
+    // context files export their provider together with its hook.
+    files: ['src/components/**/*.jsx', 'src/lib/**/*.jsx', 'src/context/**/*.jsx'],
     rules: { 'react-refresh/only-export-components': 'off' },
   },
 ])
