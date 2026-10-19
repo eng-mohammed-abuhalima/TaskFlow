@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="light">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>TaskFlow</title>
+  <script>
+    (function () {
+      try {
+        var d = document.documentElement;
+        var t = localStorage.getItem('tf-theme');
+        if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        d.setAttribute('data-theme', t);
+        var l = localStorage.getItem('tf-lang');
+        if (l !== 'en' && l !== 'ar') l = /^ar\b/i.test(navigator.language || '') ? 'ar' : 'en';
+        d.lang = l;
+        d.dir = l === 'ar' ? 'rtl' : 'ltr';
+      } catch (e) { }
+    })();
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>
