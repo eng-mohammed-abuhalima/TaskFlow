@@ -1,0 +1,26 @@
+// Shared form rules. Each returns an error message, or undefined when the value is valid.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export const PASSWORD_MIN = 8;
+
+export function validateEmail(email, t) {
+  if (!email.trim()) return t('Email is required.', 'البريد الإلكتروني مطلوب.');
+  if (!EMAIL_RE.test(email.trim())) return t('Enter a valid email address, like name@team.dev', 'أدخل بريدًا إلكترونيًا صحيحًا، مثل name@team.dev');
+}
+
+export function validatePassword(password, t, { checkLength = true } = {}) {
+  if (!password) return t('Password is required.', 'كلمة المرور مطلوبة.');
+  if (checkLength && password.length < PASSWORD_MIN) {
+    return t(`Password must be at least ${PASSWORD_MIN} characters`, `يجب أن تتكون كلمة المرور من ${PASSWORD_MIN} أحرف على الأقل`);
+  }
+}
+
+export function validateName(name, t) {
+  const n = name.trim();
+  if (!n) return t('Name is required.', 'الاسم مطلوب.');
+  if (n.length < 2) return t('Name needs at least 2 characters', 'يجب أن يتكون الاسم من حرفين على الأقل');
+  if (n.length > 60) return t('Name can be at most 60 characters', 'يجب ألا يتجاوز الاسم 60 حرفًا');
+}
+
+/** Drops undefined entries so `Object.keys(errors).length` means "has errors". */
+export const compact = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v));
