@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { DirectionProvider } from '@radix-ui/react-direction';
 import { usePrefs } from './context/PreferencesContext.jsx';
 import { useAuth } from './context/AuthContext.jsx';
@@ -8,8 +8,17 @@ import { FullPageLoading } from './components/routing/FullPageLoading.jsx';
 import { AppLayout } from './components/AppLayout.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
-import Placeholder from './pages/Placeholder.jsx';
+import Dashboard from './pages/Dashboard.jsx';
+import NewProject from './pages/NewProject.jsx';
+import ProjectDetails from './pages/ProjectDetails.jsx';
+import ProjectSettings from './pages/ProjectSettings.jsx';
 import NotFound from './pages/NotFound.jsx';
+
+// Remount the page when :id changes, so the previous project never flashes while the next one loads.
+function KeyedById({ page: Page }) {
+  const { id } = useParams();
+  return <Page key={id} />;
+}
 
 function HomeRedirect() {
   const { user, loading } = useAuth();
@@ -18,7 +27,7 @@ function HomeRedirect() {
 }
 
 export default function App() {
-  const { t, dir } = usePrefs();
+  const { dir } = usePrefs();
   return (
     <DirectionProvider dir={dir}>
       <Routes>
@@ -31,10 +40,10 @@ export default function App() {
 
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<Placeholder title={t('Dashboard', 'لوحة التحكم')} />} />
-            <Route path="/projects/new" element={<Placeholder title={t('New project', 'مشروع جديد')} />} />
-            <Route path="/projects/:id" element={<Placeholder title={t('Project', 'المشروع')} />} />
-            <Route path="/projects/:id/settings" element={<Placeholder title={t('Project settings', 'إعدادات المشروع')} />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/projects/new" element={<NewProject />} />
+            <Route path="/projects/:id" element={<KeyedById page={ProjectDetails} />} />
+            <Route path="/projects/:id/settings" element={<KeyedById page={ProjectSettings} />} />
           </Route>
         </Route>
 
