@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { StatePage } from '../components/States.jsx';
+import { usePrefs } from '../context/PreferencesContext.jsx';
 
-export default function NotFound({ t }) {
+export default function NotFound() {
+  const { t } = usePrefs();
   const navigate = useNavigate();
   return (
     <StatePage kind="notFound" title={t('Page not found', 'الصفحة غير موجودة')}
