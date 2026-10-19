@@ -12,10 +12,10 @@ export const projectCardClasses = {
     'transition-[translate,box-shadow,border-color] duration-base ease-flow ' +
     'hover:-translate-y-0.5 hover:border-strong hover:shadow-pop has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-1 has-[a:focus-visible]:outline-ring ' +
     'motion-reduce:transition-none motion-reduce:hover:translate-y-0',
-  title: 'font-display text-subheading font-semibold text-fg',
+  title: 'user-text font-display text-subheading font-semibold text-fg',
   link: 'outline-none after:absolute after:inset-0 after:rounded-[inherit] after:content-[""]',
   arrow: 'text-fg-subtle transition-[color,translate] duration-base ease-flow group-hover:text-fg-primary group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none',
-  description: 'line-clamp-2 text-body-sm text-fg-muted',
+  description: 'user-text line-clamp-2 text-body-sm text-fg-muted',
   track: 'h-1.5 w-full overflow-hidden rounded-pill bg-surface-sunken',
   fill: 'h-full rounded-pill bg-primary transition-[width] duration-slow ease-flow motion-reduce:transition-none',
   meta: 'flex items-center justify-between gap-3 text-body-sm text-fg-muted',
@@ -46,7 +46,7 @@ export function ProjectCard({ name, description, href = '#', done = 0, total = 0
         </div>
       </div>
       <div className={projectCardClasses.meta}>
-        <AvatarStack names={members} label={t(members.length + ' members', members.length + ' أعضاء')} />
+        {members.length > 0 ? <AvatarStack names={members} label={t(members.length + ' members', members.length + ' أعضاء')} /> : <span />}
         {overdue > 0 ? (
           <span className="inline-flex items-center gap-1 font-medium text-danger-fg tabular-nums">
             <Icon icon={TriangleAlert} size={14} />
