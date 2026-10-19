@@ -84,6 +84,8 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
   using placeholder pages and a 404 `StatePage`).
 - Phased plan: `docs/ROADMAP.md` (Arabic). Work one phase at a time, only when Mohammed says to start it,
   and tick its checkboxes when done.
-- Next: create Firebase project + `src/lib/firebase.js` → auth (register/login, protected routes, `/` redirect)
-  → projects CRUD → tasks CRUD → firestore.rules + tests with a second account → deploy.
+- Firebase project `taskflow-be3db` (linked in `.firebaserc`). Phases 1–2 done: auth, route guards,
+  `AuthContext` + `PreferencesContext` (use `usePrefs()` for t/lang/theme), users/userEmails rules deployed.
+  Test account credentials live in git-ignored `test-accounts.local`; never print them.
+- Next: projects CRUD → tasks CRUD → firestore.rules + tests with a second account → deploy.
 - Mohammed makes all commits himself: prepare the changes and give him the `git add` / `git commit` commands.

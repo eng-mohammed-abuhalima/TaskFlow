@@ -30,7 +30,7 @@
 
 ---
 
-## المرحلة 1 — إعداد Firebase
+## المرحلة 1 — إعداد Firebase ✅ خلصت
 
 **الهدف:** التطبيق متصل بمشروع Firebase حقيقي، والـ rules مقفلة افتراضياً.
 
@@ -52,9 +52,20 @@
 
 ---
 
-## المرحلة 2 — تسجيل الدخول والحماية (FR-01..04, US-01/02)
+## المرحلة 2 — تسجيل الدخول والحماية (FR-01..04, US-01/02) ✅ خلصت
 
 **الهدف:** تسجيل حساب، ودخول، وخروج، والصفحات المحمية ما بتفتح بدون دخول.
+
+**اللي انعمل فعلياً:**
+- [x] `services/users.js`: التسجيل والدخول والخروج + ترجمة أخطاء Firebase
+- [x] `AuthContext` (فيه `loading` و `registering`) + `PreferencesContext` (الثيم واللغة لكل الصفحات)
+- [x] `ProtectedRoute` و `PublicOnlyRoute` و `FullPageLoading`، و `/` بتحوّل حسب حالة الدخول
+- [x] صفحات Login و Register على `AuthLayout` (بدون أنيميشن TileBoard، متأجل للمرحلة 11)
+- [x] `AppLayout` + Navbar فيه الاسم الحقيقي وزر الخروج
+- [x] Rules لـ `users` و `userEmails` (انرفعت)
+- [x] اختبارات: TC-01، TC-02، TC-03، TC-04، إيميل مستخدم، الخروج + زر Back، عرض 375 بدون overflow، رفض القراءة والكتابة الممنوعة
+- حساب تجربة: `owner@example.test` (الباسورد في `test-accounts.local`، ما بينرفع على Git)
+- ملاحظة: الباسورد 8 أحرف على الأقل حسب الديزاين سيستم (Firebase بيطلب 6 بس)
 
 **الملفات:**
 - `src/services/users.js`: `register(name, email, password)`. بتعمل حساب Auth + `updateProfile` + بتكتب `users/{uid}` و `userEmails/{emailLowercase}` بنفس الـ batch.
