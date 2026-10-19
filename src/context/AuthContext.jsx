@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../lib/firebase.js';
+import { logoutUser } from '../services/users.js';
 
 const AuthContext = createContext(null);
 
@@ -12,18 +13,30 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   // True while register is still writing the profile, so PublicOnlyRoute doesn't navigate away mid-way.
   const [registering, setRegistering] = useState(false);
+  // True after the user pressed "Log out", so ProtectedRoute doesn't remember the page they were on
+  // (the next person to sign in shouldn't land on it). Cleared on the next sign in.
+  const [loggedOut, setLoggedOut] = useState(false);
 
   useEffect(
-    () => onAuthStateChanged(auth, (u) => { setUser(snapshot(u)); setLoading(false); }),
+    () => onAuthStateChanged(auth, (u) => {
+      setUser(snapshot(u));
+      if (u) setLoggedOut(false);
+      setLoading(false);
+    }),
     []
   );
 
   // updateProfile() does not fire onAuthStateChanged, so register calls this after setting the name.
   const refreshUser = useCallback(() => setUser(snapshot(auth.currentUser)), []);
 
+  const logout = useCallback(async () => {
+    setLoggedOut(true);
+    await logoutUser();
+  }, []);
+
   const value = useMemo(
-    () => ({ user, loading, registering, setRegistering, refreshUser }),
-    [user, loading, registering, refreshUser]
+    () => ({ user, loading, registering, setRegistering, refreshUser, loggedOut, logout }),
+    [user, loading, registering, refreshUser, loggedOut, logout]
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
