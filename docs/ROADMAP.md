@@ -83,9 +83,19 @@
 
 ---
 
-## المرحلة 3 — المشاريع CRUD (FR-05/06/18, US-03)
+## المرحلة 3 — المشاريع CRUD (FR-05/06/18, US-03) ✅ خلصت
 
 **الهدف:** المالك بيعمل مشروع، ويشوفه، ويعدّله، ويحذفه.
+
+**اللي انعمل فعلياً:**
+- [x] `services/projects.js` (إنشاء، قائمة، قراءة، تعديل، حذف مع مسح المهام بـ batches)
+- [x] `useProject` بحالات loading / ready / notFound / denied / error + `ProjectStatusView`
+- [x] صفحات: مشروع جديد، الـ Dashboard (قائمة المشاريع + empty + error + skeleton)، تفاصيل المشروع (هيكل)، الإعدادات (تعديل + حذف بتأكيد)
+- [x] `ToastContext` للرسائل، و `ProjectForm` مشترك، و `Breadcrumb`
+- [x] Rules للمشاريع + قاعدة مؤقتة للمهام (المالك بيقرأ ويحذف) — انرفعت
+- [x] اختبارات بحسابين: TC-05، TC-06، TC-13، 404، الحذف، 6 محاولات اختراق من الكونسول كلها مرفوضة، 375px بالعربي
+- إصلاحات جانبية: رابط Dashboard بالـ Navbar كان مفعّل بكل الصفحات؛ بعد الخروج كان الدخول التالي يرجع لصفحة المستخدم السابق؛ النص الإنجليزي جوا الواجهة العربية (utility اسمه `user-text`)
+- حساب تاني: `member@example.test` (في `test-accounts.local`)، ومشروع ديمو "Website Redesign 2026"
 
 **الملفات:**
 - `src/services/projects.js`: `createProject`، و `listMyProjects(uid)` (`where('memberIds','array-contains',uid)`)، و `getProject`، و `updateProject`، و `deleteProject`.

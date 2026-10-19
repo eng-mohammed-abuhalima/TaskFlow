@@ -87,5 +87,8 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 - Firebase project `taskflow-be3db` (linked in `.firebaserc`). Phases 1–2 done: auth, route guards,
   `AuthContext` + `PreferencesContext` (use `usePrefs()` for t/lang/theme), users/userEmails rules deployed.
   Test account credentials live in git-ignored `test-accounts.local`; never print them.
-- Next: projects CRUD → tasks CRUD → firestore.rules + tests with a second account → deploy.
+- Phase 3 done: projects CRUD (`services/projects.js`, `useProject` + `ProjectStatusView` for 404/403,
+  `ToastContext` → `useToast()`, `ProjectForm`, `Breadcrumb`). Wrap user-entered text in the `user-text`
+  utility (unicode-bidi: plaintext) instead of setting `dir`. Logout goes through `useAuth().logout`.
+- Next: tasks CRUD → firestore.rules + tests with a second account → deploy.
 - Mohammed makes all commits himself: prepare the changes and give him the `git add` / `git commit` commands.
