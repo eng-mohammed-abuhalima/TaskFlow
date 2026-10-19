@@ -22,5 +22,21 @@ export function validateName(name, t) {
   if (n.length > 60) return t('Name can be at most 60 characters', 'يجب ألا يتجاوز الاسم 60 حرفًا');
 }
 
+export const PROJECT_NAME = { min: 3, max: 80 };
+export const DESCRIPTION_MAX = 1000;
+
+export function validateProjectName(name, t) {
+  const n = name.trim();
+  if (!n) return t('Project name is required.', 'اسم المشروع مطلوب.');
+  if (n.length < PROJECT_NAME.min) return t(`Name needs at least ${PROJECT_NAME.min} characters`, `يجب أن يتكون الاسم من ${PROJECT_NAME.min} أحرف على الأقل`);
+  if (n.length > PROJECT_NAME.max) return t(`Name can be at most ${PROJECT_NAME.max} characters`, `يجب ألا يتجاوز الاسم ${PROJECT_NAME.max} حرفًا`);
+}
+
+export function validateDescription(description, t) {
+  if (description.trim().length > DESCRIPTION_MAX) {
+    return t(`Description can be at most ${DESCRIPTION_MAX} characters`, `يجب ألا يتجاوز الوصف ${DESCRIPTION_MAX} حرف`);
+  }
+}
+
 /** Drops undefined entries so `Object.keys(errors).length` means "has errors". */
 export const compact = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v));
