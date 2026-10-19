@@ -3,6 +3,53 @@ rules_version = '2';
 // Deny everything by default. Each phase opens only what it needs.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function validName(name) {
+      return name is string && name.trim().size() >= 2 && name.size() <= 60;
+    }
+
+    // Public profile. Only the owner reads or writes it for now
+    // (phase 5 decides how project members see each other's names).
+    match /users/{uid} {
+      allow read: if isSelf(uid);
+
+      allow create: if isSelf(uid)
+        && request.resource.data.keys().hasOnly(['displayName', 'email', 'createdAt'])
+        && validName(request.resource.data.displayName)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.createdAt == request.time;
+
+      // Only the name can change.
+      allow update: if isSelf(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
+        && validName(request.resource.data.displayName);
+
+      allow delete: if false;
+    }
+
+    // Email -> uid lookup for "add member by email".
+    // get only (no list), so nobody can dump every registered email.
+    match /userEmails/{email} {
+      allow get: if signedIn();
+      allow list: if false;
+
+      allow create: if signedIn()
+        && email == request.auth.token.email
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid;
+
+      allow update, delete: if false;
+    }
+
+    // Anything not matched above stays closed.
     match /{document=**} {
       allow read, write: if false;
     }
