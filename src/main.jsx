@@ -12,6 +12,7 @@ import './index.css';
 
 import { PreferencesProvider } from './context/PreferencesContext.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
+import { ToastProvider } from './context/ToastContext.jsx';
 import App from './App.jsx';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -19,7 +20,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <PreferencesProvider>
         <AuthProvider>
-          <App />
+          <ToastProvider>
+            <App />
+          </ToastProvider>
         </AuthProvider>
       </PreferencesProvider>
     </BrowserRouter>
