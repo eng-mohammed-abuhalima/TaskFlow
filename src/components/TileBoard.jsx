@@ -51,10 +51,11 @@ const HOP_MS = 170;
 
 const reduced = () => typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export function TileBoard({ layout = 'board', className }) {
+/** `instant` renders the finished, ordered board with no motion (like prefers-reduced-motion), for replays. */
+export function TileBoard({ layout = 'board', className, instant = false }) {
   const SPIRAL = PATHS[layout];
   const REST_INDEX = SPIRAL[SPIRAL.length - 1];
-  const still = reduced();
+  const still = instant || reduced();
   const [step, setStep] = useState(still ? SPIRAL.length : -1); // -1 = falling, 0..n-1 = walking, n = at rest
 
   useEffect(() => {
@@ -63,7 +64,7 @@ export function TileBoard({ layout = 'board', className }) {
     const start = DROP_STAGGER * (COUNT - 1) + DROP_MS + 120;
     for (let s = 0; s <= SPIRAL.length; s++) timers.push(setTimeout(() => setStep(s), start + s * HOP_MS));
     return () => timers.forEach(clearTimeout);
-  }, [still]);
+  }, [still, SPIRAL.length]);
 
   const done = step >= SPIRAL.length;
   const visited = new Set(step < 0 ? [] : SPIRAL.slice(0, Math.min(step + 1, SPIRAL.length)));
@@ -76,7 +77,7 @@ export function TileBoard({ layout = 'board', className }) {
         const sorted = visited.has(i);
         const state = i === focus ? (done ? tileBoardClasses.rest : tileBoardClasses.focus) : sorted ? tileBoardClasses.sorted : tileBoardClasses.idle;
         return (
-          <span key={i} className={tileBoardClasses.drop} style={{ animationDelay: DROP_ORDER.indexOf(i) * DROP_STAGGER + 'ms' }}>
+          <span key={i} className={still ? 'block' : tileBoardClasses.drop} style={{ animationDelay: DROP_ORDER.indexOf(i) * DROP_STAGGER + 'ms' }}>
             <span
               className={cx(tileBoardClasses.tile, layout === 'band' ? tileBoardClasses.bandTile : tileBoardClasses.boardTile, state)}
               style={{ transform: sorted ? 'none' : `translate(${dx}px, ${dy}px) rotate(${rot}deg)` }}
