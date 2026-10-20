@@ -16,6 +16,11 @@ service cloud.firestore {
       return name is string && name.trim().size() >= 2 && name.size() <= 60;
     }
 
+    // Why someone declined a task or left a project.
+    function validReason(reason) {
+      return reason is string && reason.trim().size() >= 3 && reason.size() <= 300;
+    }
+
     // Private profile: only its owner reads or writes it. Project members see each other's names
     // through projects/{id}.members instead (a copy kept by the project owner).
     match /users/{uid} {
@@ -33,6 +38,90 @@ service cloud.firestore {
         && validName(request.resource.data.displayName);
 
       allow delete: if false;
+
+      // In-app notifications. Only the recipient reads them; they may mark them read, answer
+      // "declined" once, or delete them. Anyone else can only create one as part of the very
+      // change it reports (checked with get / getAfter in the same batch), never to themselves.
+      match /notifications/{noteId} {
+        function note() {
+          return request.resource.data;
+        }
+        function projectPath() {
+          return /databases/$(database)/documents/projects/$(note().projectId);
+        }
+        function projectBefore() {
+          return get(projectPath()).data;
+        }
+        function projectAfter() {
+          return getAfter(projectPath()).data;
+        }
+        function taskPath() {
+          return /databases/$(database)/documents/projects/$(note().projectId)/tasks/$(note().taskId);
+        }
+        function noteKeys() {
+          return ['type', 'projectId', 'projectName', 'taskId', 'taskTitle', 'actorId', 'actorName',
+            'reason', 'dueDate', 'sourceId', 'at', 'read', 'response'];
+        }
+        function hasTask() {
+          return note().taskId is string && note().taskId.size() <= 64;
+        }
+        // The decline answers a "task_assigned" note the decliner received from this recipient.
+        function answersAssignment() {
+          let source = get(/databases/$(database)/documents/users/$(request.auth.uid)/notifications/$(note().sourceId)).data;
+          return source.type == 'task_assigned' && source.actorId == uid && source.taskId == note().taskId
+            && source.projectId == note().projectId;
+        }
+        function matchesChange() {
+          let type = note().type;
+          return (type == 'task_assigned' && hasTask()
+                && getAfter(taskPath()).data.assigneeId == uid
+                && (!exists(taskPath()) || get(taskPath()).data.assigneeId != uid))
+            || (type == 'task_due_changed' && hasTask()
+                && get(taskPath()).data.assigneeId == uid && getAfter(taskPath()).data.assigneeId == uid
+                && get(taskPath()).data.dueDate != note().dueDate && getAfter(taskPath()).data.dueDate == note().dueDate)
+            || (type == 'task_deleted' && hasTask()
+                && get(taskPath()).data.assigneeId == uid && !existsAfter(taskPath()))
+            || (type == 'task_done' && hasTask() && uid == projectBefore().ownerId
+                && get(taskPath()).data.status != 'done' && getAfter(taskPath()).data.status == 'done')
+            || (type == 'task_declined' && hasTask() && validReason(note().reason) && note().sourceId is string
+                && get(taskPath()).data.assigneeId == request.auth.uid && getAfter(taskPath()).data.assigneeId == null
+                && answersAssignment())
+            || (type == 'member_added' && request.auth.uid == projectBefore().ownerId
+                && !(uid in projectBefore().memberIds) && uid in projectAfter().memberIds)
+            || (type == 'member_left' && uid == projectBefore().ownerId && validReason(note().reason)
+                && !(request.auth.uid in projectAfter().memberIds));
+        }
+
+        allow read: if isSelf(uid);
+        allow delete: if isSelf(uid);
+
+        // Read once; "declined" only once and only on something that can be declined.
+        allow update: if isSelf(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'response'])
+          && request.resource.data.read == true
+          && (request.resource.data.response == resource.data.response
+              || (resource.data.response == null && request.resource.data.response == 'declined'
+                  && resource.data.type in ['task_assigned', 'member_added']));
+
+        allow create: if signedIn()
+          && uid != request.auth.uid
+          && note().keys().hasOnly(noteKeys())
+          && note().keys().hasAll(noteKeys())
+          && note().projectId is string
+          && request.auth.uid in projectBefore().memberIds
+          && note().actorId == request.auth.uid
+          && note().actorName == projectBefore().members[request.auth.uid].displayName
+          && note().projectName == projectBefore().name
+          && (note().taskId == null || hasTask())
+          && (note().taskTitle == null || (note().taskTitle is string && note().taskTitle.size() <= 120))
+          && (note().reason == null || validReason(note().reason))
+          && (note().dueDate == null || (note().dueDate is string && note().dueDate.size() == 10))
+          && (note().sourceId == null || (note().sourceId is string && note().sourceId.size() <= 64))
+          && note().at == request.time
+          && note().read == false
+          && note().response == null
+          && matchesChange();
+      }
     }
 
     // Email -> { uid, displayName } lookup for "add member by email".
@@ -143,7 +232,99 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['memberIds', 'members']) || validMembership());
 
+      // A member (never the owner) leaves on their own: only their id and their name entry go.
+      allow update: if signedIn() && isMember() && !isOwner()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'members', 'updatedAt'])
+        && request.resource.data.memberIds == resource.data.memberIds.removeAll([request.auth.uid])
+        && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
+        && !(request.auth.uid in request.resource.data.members)
+        && request.resource.data.updatedAt == request.time;
+
       allow delete: if signedIn() && isOwner();
+
+      // Activity log: who did what, written in the same batch as the change it describes and
+      // checked against that change (get = before, getAfter = after). Only the owner reads it.
+      // Entries never change; the owner may delete them (the app does so when deleting the project).
+      match /activity/{entryId} {
+        function before() {
+          return get(/databases/$(database)/documents/projects/$(projectId)).data;
+        }
+        function after() {
+          return getAfter(/databases/$(database)/documents/projects/$(projectId)).data;
+        }
+        function entry() {
+          return request.resource.data;
+        }
+        function taskPath() {
+          return /databases/$(database)/documents/projects/$(projectId)/tasks/$(entry().taskId);
+        }
+        function ownerActs() {
+          return request.auth.uid == before().ownerId;
+        }
+        function entryKeys() {
+          return ['type', 'actorId', 'actorName', 'taskId', 'taskTitle', 'targetId', 'targetName',
+            'from', 'to', 'fields', 'reason', 'at'];
+        }
+        function hasTask() {
+          return entry().taskId is string && entry().taskId.size() <= 64;
+        }
+        function optText(value, max) {
+          return value == null || (value is string && value.size() <= max);
+        }
+        function optStatus(value) {
+          return value == null || value in ['todo', 'in_progress', 'done'];
+        }
+        function validFields() {
+          return entry().fields == null || (entry().fields is list && entry().fields.size() <= 4
+            && entry().fields.hasOnly(['title', 'description', 'priority', 'dueDate', 'name']));
+        }
+        function hasFields() {
+          return entry().fields is list && entry().fields.size() > 0;
+        }
+        function matchesChange() {
+          let type = entry().type;
+          return (type == 'task_created' && hasTask() && !exists(taskPath()) && existsAfter(taskPath()))
+            || (type == 'task_updated' && hasTask() && exists(taskPath()) && existsAfter(taskPath()) && hasFields())
+            || (type == 'task_status' && hasTask() && entry().from != null && entry().to != null
+                && get(taskPath()).data.status == entry().from && getAfter(taskPath()).data.status == entry().to
+                && entry().from != entry().to)
+            || (type == 'task_assigned' && hasTask() && entry().targetId is string
+                && getAfter(taskPath()).data.assigneeId == entry().targetId)
+            || (type == 'task_unassigned' && hasTask() && exists(taskPath())
+                && get(taskPath()).data.assigneeId != null && getAfter(taskPath()).data.assigneeId == null)
+            || (type == 'task_deleted' && hasTask() && exists(taskPath()) && !existsAfter(taskPath()))
+            || (type == 'task_declined' && hasTask() && validReason(entry().reason)
+                && get(taskPath()).data.assigneeId == request.auth.uid && getAfter(taskPath()).data.assigneeId == null)
+            || (type == 'member_added' && ownerActs() && entry().targetId is string
+                && !(entry().targetId in before().memberIds) && entry().targetId in after().memberIds)
+            || (type == 'member_removed' && ownerActs() && entry().targetId is string
+                && entry().targetId in before().memberIds && !(entry().targetId in after().memberIds))
+            || (type == 'member_left' && !ownerActs() && validReason(entry().reason)
+                && !(request.auth.uid in after().memberIds))
+            || (type == 'project_updated' && ownerActs() && hasFields());
+        }
+
+        allow read: if signedIn() && ownerActs();
+        allow update: if false;
+        allow delete: if signedIn() && ownerActs();
+
+        allow create: if signedIn()
+          && request.auth.uid in before().memberIds
+          && entry().keys().hasOnly(entryKeys())
+          && entry().keys().hasAll(entryKeys())
+          && entry().actorId == request.auth.uid
+          && entry().actorName == before().members[request.auth.uid].displayName
+          && (entry().taskId == null || hasTask())
+          && optText(entry().taskTitle, 120)
+          && optText(entry().targetId, 128)
+          && optText(entry().targetName, 60)
+          && optStatus(entry().from)
+          && optStatus(entry().to)
+          && validFields()
+          && (entry().reason == null || validReason(entry().reason))
+          && entry().at == request.time
+          && matchesChange();
+      }
 
       // Tasks. Keep in sync with src/lib/permissions.js.
       match /tasks/{taskId} {

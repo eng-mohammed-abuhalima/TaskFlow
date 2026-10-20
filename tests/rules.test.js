@@ -350,6 +350,201 @@ describe('deleting tasks', () => {
   });
 });
 
+// Activity log + notifications: entries are written in one batch with the change they describe.
+const actRef = (db, pid = P) => doc(collection(db, 'projects', pid, 'activity'));
+const noteRef = (db, uid, id) => (id ? doc(db, 'users', uid, 'notifications', id) : doc(collection(db, 'users', uid, 'notifications')));
+const activity = (actor, o = {}) => ({
+  type: 'task_created', actorId: actor, actorName: NAMES[actor], taskId: null, taskTitle: null, targetId: null,
+  targetName: null, from: null, to: null, fields: null, reason: null, at: ts(), ...o,
+});
+const note = (actor, o = {}) => ({
+  type: 'task_assigned', projectId: P, projectName: 'Website Redesign', taskId: null, taskTitle: null, actorId: actor,
+  actorName: NAMES[actor], reason: null, dueDate: null, sourceId: null, at: ts(), read: false, response: null, ...o,
+});
+/** Runs fn(batch, db) as `uid` and commits. */
+const inBatch = (uid, fn) => { const db = as(uid); const batch = writeBatch(db); fn(batch, db); return batch.commit(); };
+const seedDoc = (path, data) => env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), ...path), data));
+const REASON = 'I am on leave this week';
+
+describe('leaving a project', () => {
+  const leave = (db, uid) => updateDoc(projRef(db), { memberIds: arrayRemove(uid), [`members.${uid}`]: deleteField(), updatedAt: ts() });
+
+  allows('a member leaving on their own', () => leave(as('member'), 'member'));
+  denies('a member removing someone else', () => leave(as('member'), 'owner'));
+  // Only their own name entry goes, but someone else's id: the id list must lose exactly the leaver.
+  denies('removing another id while dropping only your own name', () => updateDoc(projRef(as('member')), {
+    memberIds: arrayRemove('owner'), 'members.member': deleteField(), updatedAt: ts(),
+  }));
+  denies('leaving but keeping your name entry', () => updateDoc(projRef(as('member')), { memberIds: arrayRemove('member'), updatedAt: ts() }));
+  denies('leaving and renaming the project in the same write', () => updateDoc(projRef(as('member')), {
+    memberIds: arrayRemove('member'), 'members.member': deleteField(), name: 'Taken over', updatedAt: ts(),
+  }));
+  denies('an outsider "leaving" a project they are not in', () => leave(as('extra'), 'extra'));
+});
+
+describe('activity log', () => {
+  allows('a member creating a task together with its entry', () => inBatch('member', (b, db) => {
+    const task = doc(tasksCol(db));
+    b.set(task, newTask({ createdBy: 'member' }));
+    b.set(actRef(db), activity('member', { taskId: task.id, taskTitle: 'New task' }));
+  }));
+  denies('a "task created" entry with no task being created', () => setDoc(actRef(as('member')), activity('member', { taskId: 'byOwner' })));
+  denies('an entry credited to someone else', () => inBatch('member', (b, db) => {
+    const task = doc(tasksCol(db));
+    b.set(task, newTask({ createdBy: 'member' }));
+    b.set(actRef(db), activity('member', { taskId: task.id, actorId: 'owner' }));
+  }));
+  denies('an entry with a forged name', () => inBatch('member', (b, db) => {
+    const task = doc(tasksCol(db));
+    b.set(task, newTask({ createdBy: 'member' }));
+    b.set(actRef(db), activity('member', { taskId: task.id, actorName: 'Owner Demo' }));
+  }));
+  denies('an entry with an extra field', () => inBatch('member', (b, db) => {
+    const task = doc(tasksCol(db));
+    b.set(task, newTask({ createdBy: 'member' }));
+    b.set(actRef(db), { ...activity('member', { taskId: task.id }), ip: '1.2.3.4' });
+  }));
+  denies('an outsider writing into the log', () => setDoc(actRef(as('outsider')), activity('outsider', { type: 'project_updated', fields: ['name'] })));
+
+  allows('the assignee changing the status with a matching entry', () => inBatch('member', (b, db) => {
+    b.update(taskRef(db, 'assignedToMember'), { status: 'in_progress', updatedAt: ts() });
+    b.set(actRef(db), activity('member', { type: 'task_status', taskId: 'assignedToMember', from: 'todo', to: 'in_progress' }));
+  }));
+  denies('a status entry that does not match the change', () => inBatch('member', (b, db) => {
+    b.update(taskRef(db, 'assignedToMember'), { status: 'in_progress', updatedAt: ts() });
+    b.set(actRef(db), activity('member', { type: 'task_status', taskId: 'assignedToMember', from: 'todo', to: 'done' }));
+  }));
+  allows('deleting a task with its entry', () => inBatch('owner', (b, db) => {
+    b.delete(taskRef(db, 'byOwner'));
+    b.set(actRef(db), activity('owner', { type: 'task_deleted', taskId: 'byOwner', taskTitle: 'A task' }));
+  }));
+  denies('a "deleted" entry for a task that still exists', () => setDoc(actRef(as('owner')), activity('owner', { type: 'task_deleted', taskId: 'byOwner' })));
+  allows('the owner adding a member with its entry', () => inBatch('owner', (b, db) => {
+    b.update(projRef(db), { memberIds: arrayUnion('extra'), 'members.extra': { displayName: NAMES.extra }, updatedAt: ts() });
+    b.set(actRef(db), activity('owner', { type: 'member_added', targetId: 'extra', targetName: NAMES.extra }));
+  }));
+  denies('a member logging a project edit', () => setDoc(actRef(as('member')), activity('member', { type: 'project_updated', fields: ['name'] })));
+  allows('the owner logging a project edit', () => inBatch('owner', (b, db) => {
+    b.update(projRef(db), { name: 'Website Redesign 2', updatedAt: ts() });
+    b.set(actRef(db), activity('owner', { type: 'project_updated', fields: ['name'] }));
+  }));
+
+  allows('the owner reading the log', () => getDocs(collection(as('owner'), 'projects', P, 'activity')));
+  denies('a member reading the log', () => getDocs(collection(as('member'), 'projects', P, 'activity')));
+  denies('an outsider reading the log', () => getDocs(collection(as('outsider'), 'projects', P, 'activity')));
+
+  it('denies: editing an entry; allows: the owner deleting one', async () => {
+    await seedDoc(['projects', P, 'activity', 'e1'], { ...activity('member'), at: Timestamp.now() });
+    await assertFails(updateDoc(doc(as('owner'), 'projects', P, 'activity', 'e1'), { actorName: 'Someone' }));
+    await assertFails(deleteDoc(doc(as('member'), 'projects', P, 'activity', 'e1')));
+    await assertSucceeds(deleteDoc(doc(as('owner'), 'projects', P, 'activity', 'e1')));
+  });
+});
+
+describe('notifications', () => {
+  allows('notifying the person a new task is assigned to', () => inBatch('owner', (b, db) => {
+    const task = doc(tasksCol(db));
+    b.set(task, newTask({ createdBy: 'owner', assigneeId: 'member' }));
+    b.set(noteRef(db, 'member'), note('owner', { taskId: task.id, taskTitle: 'New task' }));
+  }));
+  denies('notifying someone the task is not assigned to', () => inBatch('owner', (b, db) => {
+    const task = doc(tasksCol(db));
+    b.set(task, newTask({ createdBy: 'owner' }));
+    b.set(noteRef(db, 'member'), note('owner', { taskId: task.id }));
+  }));
+  denies('notifying yourself', () => inBatch('member', (b, db) => {
+    const task = doc(tasksCol(db));
+    b.set(task, newTask({ createdBy: 'member', assigneeId: 'member' }));
+    b.set(noteRef(db, 'member'), note('member', { taskId: task.id }));
+  }));
+  denies('a note with a forged project name', () => inBatch('owner', (b, db) => {
+    const task = doc(tasksCol(db));
+    b.set(task, newTask({ createdBy: 'owner', assigneeId: 'member' }));
+    b.set(noteRef(db, 'member'), note('owner', { taskId: task.id, projectName: 'Payroll' }));
+  }));
+  denies('a note that arrives already read', () => inBatch('owner', (b, db) => {
+    const task = doc(tasksCol(db));
+    b.set(task, newTask({ createdBy: 'owner', assigneeId: 'member' }));
+    b.set(noteRef(db, 'member'), note('owner', { taskId: task.id, read: true }));
+  }));
+  denies('an outsider sending a note', () => setDoc(noteRef(as('outsider'), 'member'), note('outsider', { type: 'member_added' })));
+  allows('the owner notifying a member they were added', () => inBatch('owner', (b, db) => {
+    b.update(projRef(db), { memberIds: arrayUnion('extra'), 'members.extra': { displayName: NAMES.extra }, updatedAt: ts() });
+    b.set(noteRef(db, 'extra'), note('owner', { type: 'member_added' }));
+  }));
+  denies('an "added" note without adding them', () => setDoc(noteRef(as('owner'), 'extra'), note('owner', { type: 'member_added' })));
+  allows('notifying the assignee that the due date moved', () => inBatch('owner', (b, db) => {
+    b.update(taskRef(db, 'assignedToMember'), { dueDate: '2026-12-01', updatedAt: ts() });
+    b.set(noteRef(db, 'member'), note('owner', { type: 'task_due_changed', taskId: 'assignedToMember', dueDate: '2026-12-01' }));
+  }));
+  allows('notifying the assignee that their task was deleted', () => inBatch('owner', (b, db) => {
+    b.delete(taskRef(db, 'assignedToMember'));
+    b.set(noteRef(db, 'member'), note('owner', { type: 'task_deleted', taskId: 'assignedToMember', taskTitle: 'A task' }));
+  }));
+  allows('telling the owner a task is done', () => inBatch('member', (b, db) => {
+    b.update(taskRef(db, 'assignedToMember'), { status: 'done', updatedAt: ts() });
+    b.set(noteRef(db, 'owner'), note('member', { type: 'task_done', taskId: 'assignedToMember' }));
+  }));
+  denies('a "done" note to someone who is not the owner', () => inBatch('owner', (b, db) => {
+    b.update(taskRef(db, 'byOwner'), { status: 'done', updatedAt: ts() });
+    b.set(noteRef(db, 'member'), note('owner', { type: 'task_done', taskId: 'byOwner' }));
+  }));
+
+  it('allows: the recipient reading and marking read; denies: anyone else reading it', async () => {
+    await seedDoc(['users', 'member', 'notifications', 'n1'], { ...note('owner'), at: Timestamp.now() });
+    await assertSucceeds(getDocs(collection(as('member'), 'users', 'member', 'notifications')));
+    await assertFails(getDocs(collection(as('owner'), 'users', 'member', 'notifications')));
+    await assertFails(updateDoc(noteRef(as('member'), 'member', 'n1'), { actorName: 'Someone' }));
+    await assertSucceeds(updateDoc(noteRef(as('member'), 'member', 'n1'), { read: true }));
+  });
+
+  it('denies: declining a note that can\'t be declined, or declining twice', async () => {
+    await seedDoc(['users', 'owner', 'notifications', 'n1'], { ...note('member', { type: 'task_done' }), at: Timestamp.now() });
+    await assertFails(updateDoc(noteRef(as('owner'), 'owner', 'n1'), { read: true, response: 'declined' }));
+    await seedDoc(['users', 'member', 'notifications', 'n2'], { ...note('owner', { response: 'declined', read: true }), at: Timestamp.now() });
+    await assertFails(updateDoc(noteRef(as('member'), 'member', 'n2'), { response: 'accepted' }));
+  });
+
+  // The decline batch the app uses: unassign + log + tell the assigner + answer the original note.
+  const declineTask = (reason, recipient = 'owner') => inBatch('member', (b, db) => {
+    b.update(taskRef(db, 'assignedToMember'), { assigneeId: null, updatedAt: ts() });
+    b.set(actRef(db), activity('member', { type: 'task_declined', taskId: 'assignedToMember', reason }));
+    b.set(noteRef(db, recipient), note('member', { type: 'task_declined', taskId: 'assignedToMember', reason, sourceId: 'src' }));
+    b.update(noteRef(db, 'member', 'src'), { read: true, response: 'declined' });
+  });
+  const seedSource = () => seedDoc(['users', 'member', 'notifications', 'src'], { ...note('owner', { taskId: 'assignedToMember' }), at: Timestamp.now() });
+
+  it('allows: declining an assigned task with a reason', async () => {
+    await seedSource();
+    await assertSucceeds(declineTask(REASON));
+  });
+  it('denies: declining with a reason that is too short or too long', async () => {
+    await seedSource();
+    await assertFails(declineTask('no'));
+    await assertFails(declineTask('x'.repeat(301)));
+  });
+  it('denies: sending the decline to someone who did not assign the task', async () => {
+    await seedSource();
+    await assertFails(declineTask(REASON, 'extra'));
+  });
+
+  // Leaving after declining a project: unassign + leave + log + tell the owner + answer the invitation.
+  const leaveProject = async (reason) => {
+    await seedDoc(['users', 'member', 'notifications', 'invite'], { ...note('owner', { type: 'member_added' }), at: Timestamp.now() });
+    return inBatch('member', (b, db) => {
+      b.update(taskRef(db, 'assignedToMember'), { assigneeId: null, updatedAt: ts() });
+      b.update(projRef(db), { memberIds: arrayRemove('member'), 'members.member': deleteField(), updatedAt: ts() });
+      b.set(actRef(db), activity('member', { type: 'member_left', reason }));
+      b.set(noteRef(db, 'owner'), note('member', { type: 'member_left', reason }));
+      b.update(noteRef(db, 'member', 'invite'), { read: true, response: 'declined' });
+    });
+  };
+  allows('declining a project: leaving with a reason, logged and sent to the owner', () => leaveProject(REASON));
+  denies('declining a project without a reason', () => leaveProject(''));
+  it('denies: a "left" note while still a member', () =>
+    assertFails(setDoc(noteRef(as('member'), 'owner'), note('member', { type: 'member_left', reason: REASON }))));
+});
+
 describe('everything else is closed', () => {
   denies('reading an unknown collection', () => getDoc(doc(as('owner'), 'admin', 'config')));
   denies('writing an unknown collection', () => setDoc(doc(as('owner'), 'admin', 'config'), { x: 1 }));

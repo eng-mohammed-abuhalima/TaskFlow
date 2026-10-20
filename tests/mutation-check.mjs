@@ -20,6 +20,11 @@ const mutations = [
   ['a member can delete any task', 'allow delete: if ownsProject() || (inProject() && resource.data.createdBy == request.auth.uid);', 'allow delete: if inProject();'],
   ['an outsider can read tasks', 'allow read: if inProject();', 'allow read: if signedIn();'],
   ['an unverified email can take over a lookup', '|| (request.auth.token.email_verified == true', '|| (true'],
+  ['a member can read the activity log', 'allow read: if signedIn() && ownerActs();', 'allow read: if signedIn();'],
+  ['log entries need not match a real change', '&& entry().at == request.time\n          && matchesChange();', '&& entry().at == request.time;'],
+  ['anyone can be sent any notification', '&& note().response == null\n          && matchesChange();', '&& note().response == null;'],
+  ['a decline can be sent to anyone', '\n                && answersAssignment())', ')'],
+  ['"leaving" can remove other members', 'request.resource.data.memberIds == resource.data.memberIds.removeAll([request.auth.uid])', 'true'],
 ];
 
 const clean = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
