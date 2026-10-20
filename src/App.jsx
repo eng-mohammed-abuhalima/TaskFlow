@@ -9,6 +9,7 @@ import { AppLayout } from './components/AppLayout.jsx';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
+import ForgotPassword from './pages/ForgotPassword.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import NewProject from './pages/NewProject.jsx';
 import ProjectDetails from './pages/ProjectDetails.jsx';
@@ -40,6 +41,7 @@ export default function App() {
         <Route element={<PublicOnlyRoute />}>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
         </Route>
 
         <Route element={<ProtectedRoute />}>

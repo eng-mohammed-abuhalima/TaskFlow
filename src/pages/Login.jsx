@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { AuthLayout, AuthAlert, authClasses } from '../components/AuthLayout.jsx';
 import { Button } from '../components/Button.jsx';
-import { TextField, PasswordField } from '../components/Field.jsx';
+import { TextField, PasswordField, Checkbox } from '../components/Field.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 import { loginUser, authErrorMessage } from '../services/users.js';
@@ -14,6 +14,7 @@ export default function Login() {
   usePageTitle(t('Sign in', 'تسجيل الدخول'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(true);
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -31,7 +32,7 @@ export default function Login() {
 
     setSaving(true);
     try {
-      await loginUser({ email, password });
+      await loginUser({ email, password, remember });
       // PublicOnlyRoute redirects once onAuthStateChanged fires.
     } catch (err) {
       setFormError(authErrorMessage(err, t));
@@ -51,6 +52,14 @@ export default function Login() {
           value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} disabled={saving} />
         <PasswordField label={t('Password', 'كلمة المرور')} required lang={lang}
           value={password} onChange={setPassword} error={errors.password} disabled={saving} />
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <Checkbox label={t('Remember me', 'تذكرني')} checked={remember} disabled={saving}
+            onChange={(e) => setRemember(e.target.checked)} />
+          {/* Carries the typed email over so it doesn't have to be entered twice. */}
+          <Link to="/forgot-password" state={{ email }} className={`${authClasses.link} text-body-sm`}>
+            {t('Forgot password?', 'نسيت كلمة المرور؟')}
+          </Link>
+        </div>
         <Button type="submit" size="lg" loading={saving} iconEnd={ArrowRight} mirrorIcon className="mt-2 w-full">
           {saving ? t('Signing in…', 'جارٍ تسجيل الدخول…') : t('Sign in', 'تسجيل الدخول')}
         </Button>

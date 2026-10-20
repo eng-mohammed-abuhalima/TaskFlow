@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CircleAlert } from 'lucide-react';
+import { CircleAlert, MailCheck } from 'lucide-react';
 import { Icon } from '../lib/icons.jsx';
 import { useMediaQuery } from '../lib/useMediaQuery.js';
 import { Logo, LanguageSwitch, ThemeSwitch } from './Navbar.jsx';
@@ -33,6 +33,7 @@ export const authClasses = {
   title: 'font-display text-title font-semibold text-fg',
   lead: 'text-body text-fg-muted',
   alert: 'flex items-start gap-2.5 rounded-leaf-sm border border-danger/50 bg-danger-soft p-3 text-body-sm text-danger-fg',
+  notice: 'flex items-start gap-2.5 rounded-leaf-sm border border-success/50 bg-success-soft p-3 text-body-sm text-success-fg',
   switch: 'text-center text-body-sm text-fg-muted',
   link: 'rounded-tight font-medium text-fg-primary underline decoration-1 underline-offset-4 hover:decoration-2 focus-ring',
 };
@@ -90,6 +91,16 @@ export function AuthAlert({ children }) {
   return (
     <div role="alert" className={authClasses.alert}>
       <Icon icon={CircleAlert} size={20} />
+      <p>{children}</p>
+    </div>
+  );
+}
+
+/** Success counterpart of AuthAlert (polite: it follows the user's own action). */
+export function AuthNotice({ children }) {
+  return (
+    <div role="status" className={authClasses.notice}>
+      <Icon icon={MailCheck} size={20} />
       <p>{children}</p>
     </div>
   );

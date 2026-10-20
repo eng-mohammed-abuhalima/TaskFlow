@@ -1,5 +1,9 @@
 import {
+  browserSessionPersistence,
+  indexedDBLocalPersistence,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  setPersistence,
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
@@ -36,8 +40,23 @@ export async function findUserByEmail(email) {
   return { uid, displayName: displayName || normalizeEmail(email).split('@')[0] };
 }
 
-export function loginUser({ email, password }) {
+/**
+ * remember = true keeps the session after the browser is closed (IndexedDB, Firebase's default);
+ * false keeps it only for this tab, so closing the tab signs the user out.
+ */
+export async function loginUser({ email, password, remember = true }) {
+  await setPersistence(auth, remember ? indexedDBLocalPersistence : browserSessionPersistence);
   return signInWithEmailAndPassword(auth, normalizeEmail(email), password);
+}
+
+/**
+ * Sends Firebase's reset link, in the UI language. After choosing a new password the user gets a
+ * "Continue" button back to our sign-in page. With email enumeration protection on (the default),
+ * an unknown email succeeds too, so the page must never say whether the account exists.
+ */
+export function sendPasswordReset(email, lang) {
+  auth.languageCode = lang;
+  return sendPasswordResetEmail(auth, normalizeEmail(email), { url: `${window.location.origin}/login` });
 }
 
 export function logoutUser() {
@@ -57,6 +76,8 @@ export function authErrorMessage(error, t) {
       return t('Enter a valid email address.', 'أدخل بريدًا إلكترونيًا صحيحًا.');
     case 'auth/weak-password':
       return t('Password is too weak.', 'كلمة المرور ضعيفة.');
+    case 'auth/missing-email':
+      return t('Email is required.', 'البريد الإلكتروني مطلوب.');
     case 'auth/too-many-requests':
       return t('Too many attempts. Wait a moment and try again.', 'محاولات كثيرة. انتظر قليلًا ثم حاول مجددًا.');
     case 'auth/network-request-failed':
