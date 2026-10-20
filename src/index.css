@@ -540,6 +540,23 @@
     color: var(--fg);
   }
 
+  /* Browser autofill (saved email/password) paints its own blue/yellow background that ignores
+     background-color. Cover it with an inset shadow in the field colour and keep our text colour,
+     so filled fields look like any other field in both themes.
+     Two rules on purpose: a browser that doesn't know one selector would drop a combined rule. */
+  input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px var(--field) inset;
+    box-shadow: 0 0 0 1000px var(--field) inset;
+    -webkit-text-fill-color: var(--fg);
+    caret-color: var(--fg);
+  }
+
+  input:autofill {
+    box-shadow: 0 0 0 1000px var(--field) inset;
+    -webkit-text-fill-color: var(--fg);
+    caret-color: var(--fg);
+  }
+
   @media (prefers-reduced-motion: reduce) {
 
     *,
