@@ -99,5 +99,8 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
   (`projectMembers`), `useProject` is live (`onSnapshot`). Test members are added/removed through the UI.
 - TileBoard intro is wired into `AuthLayout` (board on lg+, band card below). It plays once per page load;
   `TileBoard` takes `instant` to render the finished board (used when switching Sign in <-> Create account).
-- Next: phase 6 — search/filters (`lib/filterTasks.js`) and the real dashboard (stats + overdue list).
+- Phase 6 done: `lib/filterTasks.js` (pure, AND-combined filters incl. overdue) + `FilterBar` on the project page;
+  real dashboard (`useDashboard` loads projects + their tasks, `lib/taskStats.js` aggregates client-side,
+  `components/dashboard/{StatusBreakdown,OverdueList}`). FilterBar members are `[{ uid, name }]`.
+- Next: phase 7 — security rules hardening + tests with a second account (rules tests on the emulator are optional).
 - Mohammed makes all commits himself: prepare the changes and give him the `git add` / `git commit` commands.
