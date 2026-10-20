@@ -55,10 +55,6 @@ service cloud.firestore {
         && data.description is string && data.description.size() <= 1000;
     }
 
-    function projectOwner(projectId) {
-      return get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId;
-    }
-
     match /projects/{projectId} {
       function isMember() {
         return request.auth.uid in resource.data.memberIds;
@@ -89,10 +85,56 @@ service cloud.firestore {
 
       allow delete: if signedIn() && isOwner();
 
-      // Temporary: the owner can read and delete tasks so deleting a project can clear them.
-      // Full task permissions arrive in phase 4.
+      // Tasks. Keep in sync with src/lib/permissions.js.
       match /tasks/{taskId} {
-        allow read, delete: if signedIn() && projectOwner(projectId) == request.auth.uid;
+        function project() {
+          return get(/databases/$(database)/documents/projects/$(projectId)).data;
+        }
+        function inProject() {
+          return signedIn() && request.auth.uid in project().memberIds;
+        }
+        function ownsProject() {
+          return signedIn() && request.auth.uid == project().ownerId;
+        }
+        function validTask(data) {
+          return data.title is string
+            && data.title.trim().size() >= 3 && data.title.size() <= 120
+            && data.description is string && data.description.size() <= 1000
+            && data.status in ['todo', 'in_progress', 'done']
+            && data.priority in ['low', 'medium', 'high']
+            && (data.assigneeId == null || data.assigneeId in project().memberIds)
+            && (data.dueDate == null || (data.dueDate is string && data.dueDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')));
+        }
+        function taskKeys() {
+          return ['title', 'description', 'status', 'priority', 'assigneeId', 'dueDate', 'createdBy', 'createdAt', 'updatedAt'];
+        }
+
+        allow read: if inProject();
+
+        // Any member; always starts as "todo" and is credited to its creator.
+        allow create: if inProject()
+          && request.resource.data.keys().hasOnly(taskKeys())
+          && request.resource.data.keys().hasAll(taskKeys())
+          && validTask(request.resource.data)
+          && request.resource.data.status == 'todo'
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time;
+
+        // Owner, creator or assignee. Status: owner or current assignee only.
+        // createdBy / createdAt never change.
+        allow update: if inProject()
+          && (ownsProject() || resource.data.createdBy == request.auth.uid || resource.data.assigneeId == request.auth.uid)
+          && request.resource.data.keys().hasOnly(taskKeys())
+          && validTask(request.resource.data)
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedAt == request.time
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])
+              || ownsProject() || resource.data.assigneeId == request.auth.uid);
+
+        // Owner or creator.
+        allow delete: if ownsProject() || (inProject() && resource.data.createdBy == request.auth.uid);
       }
     }
 
