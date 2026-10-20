@@ -79,9 +79,14 @@ service cloud.firestore {
       // Queries must be limited to the user's own projects (where memberIds array-contains uid).
       allow list: if signedIn() && isMember();
 
-      // `members` mirrors `memberIds` with a display name per member.
-      function validMemberEntry(entry) {
-        return entry is map && entry.keys().hasOnly(['displayName']) && validName(entry.displayName);
+      // `members` mirrors `memberIds` with a display name per member. The name must be the one in that
+      // person's own profile, so an owner can't label someone with a name they didn't choose
+      // (the lookup also makes this fail if the user doesn't exist).
+      function validMemberEntry(uid, entry) {
+        return entry is map
+          && entry.keys().hasOnly(['displayName'])
+          && validName(entry.displayName)
+          && entry.displayName == get(/databases/$(database)/documents/users/$(uid)).data.displayName;
       }
 
       // The owner changes membership one person at a time. Allowed shapes:
@@ -100,11 +105,10 @@ service cloud.firestore {
           && ids.size() <= 20
           && after.members.keys().toSet() == ids.toSet()
           && (
-            (!('members' in before) && ids == [before.ownerId] && validMemberEntry(after.members[before.ownerId]))
+            (!('members' in before) && ids == [before.ownerId] && validMemberEntry(before.ownerId, after.members[before.ownerId]))
             || (ids.size() == n + 1
                 && ids[0:n] == before.memberIds
-                && exists(/databases/$(database)/documents/users/$(ids[n]))
-                && validMemberEntry(after.members[ids[n]])
+                && validMemberEntry(ids[n], after.members[ids[n]])
                 && after.members.diff(before.members).affectedKeys().hasOnly([ids[n]]))
             || (ids.size() == n - 1
                 && ids.hasOnly(before.memberIds)
@@ -120,7 +124,7 @@ service cloud.firestore {
         && request.resource.data.memberIds == [request.auth.uid]
         && request.resource.data.members is map
         && request.resource.data.members.keys() == [request.auth.uid]
-        && validMemberEntry(request.resource.data.members[request.auth.uid])
+        && validMemberEntry(request.auth.uid, request.resource.data.members[request.auth.uid])
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
 
@@ -151,7 +155,9 @@ service cloud.firestore {
             && data.status in ['todo', 'in_progress', 'done']
             && data.priority in ['low', 'medium', 'high']
             && (data.assigneeId == null || data.assigneeId in project().memberIds)
-            && (data.dueDate == null || (data.dueDate is string && data.dueDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')));
+            // YYYY-MM-DD with a real month (01-12) and day (01-31). Short months aren't checked here.
+            && (data.dueDate == null || (data.dueDate is string
+                && data.dueDate.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')));
         }
         function taskKeys() {
           return ['title', 'description', 'status', 'priority', 'assigneeId', 'dueDate', 'createdBy', 'createdAt', 'updatedAt'];
