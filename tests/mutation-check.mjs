@@ -1,0 +1,42 @@
+// Proves the rules tests have teeth: breaks firestore.rules on purpose, one way at a time, and checks that
+// `npm run test:rules` fails each time. Run it with: npm run test:rules:mutations  (about 6 minutes)
+// The real firestore.rules is never modified; each broken copy goes to the temp folder (RULES_FILE).
+import { readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const original = readFileSync(join(ROOT, 'firestore.rules'), 'utf8');
+
+const mutations = [
+  ['a member can edit the project', 'allow update: if signedIn() && isOwner()', 'allow update: if signedIn()'],
+  ['anyone can change a task status', '|| ownsProject() || resource.data.assigneeId == request.auth.uid);', '|| true);'],
+  ['emails can be listed', 'allow list: if false;', 'allow list: if signedIn();'],
+  ['member names can be forged', '&& entry.displayName == get(/databases/$(database)/documents/users/$(uid)).data.displayName;', '&& true;'],
+  ['any month is accepted in due dates', '(0[1-9]|1[0-2])', '[0-9]{2}'],
+  ['task createdBy can be changed', '&& request.resource.data.createdBy == resource.data.createdBy', '&& true'],
+  ['a member can delete any task', 'allow delete: if ownsProject() || (inProject() && resource.data.createdBy == request.auth.uid);', 'allow delete: if inProject();'],
+  ['an outsider can read tasks', 'allow read: if inProject();', 'allow read: if signedIn();'],
+];
+
+const clean = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+let missed = 0;
+for (const [name, from, to] of mutations) {
+  if (!original.includes(from)) {
+    console.log(`?  ${name}: pattern not found, update this script`);
+    missed += 1;
+    continue;
+  }
+  const file = join(tmpdir(), 'taskflow-mutated.rules');
+  writeFileSync(file, original.replace(from, to));
+  const run = spawnSync('npm run test:rules', { cwd: ROOT, shell: true, encoding: 'utf8', env: { ...process.env, RULES_FILE: file } });
+  const out = clean((run.stdout || '') + (run.stderr || ''));
+  const failed = Number((out.match(/^ℹ fail (\d+)/m) || [])[1] ?? 0);
+  const caught = failed > 0;
+  if (!caught) missed += 1;
+  console.log(`${caught ? 'caught' : 'MISSED'}  ${name} (${failed} failing test${failed === 1 ? '' : 's'})`);
+}
+console.log(missed ? `\n${missed} mutation(s) were NOT caught` : '\nAll mutations were caught');
+process.exit(missed ? 1 : 0);

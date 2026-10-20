@@ -19,6 +19,11 @@ export default defineConfig([
     },
   },
   {
+    // Rules tests run in Node, not the browser.
+    files: ['tests/**/*.js'],
+    languageOptions: { globals: globals.node },
+  },
+  {
     // Design-system files export class maps and helpers next to their components on purpose;
     // context files export their provider together with its hook.
     files: ['src/components/**/*.jsx', 'src/lib/**/*.jsx', 'src/context/**/*.jsx'],
