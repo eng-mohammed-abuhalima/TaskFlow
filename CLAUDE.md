@@ -104,7 +104,7 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 - Phase 6 done: `lib/filterTasks.js` (pure, AND-combined filters incl. overdue) + `FilterBar` on the project page;
   real dashboard (`useDashboard` loads projects + their tasks, `lib/taskStats.js` aggregates client-side,
   `components/dashboard/{StatusBreakdown,OverdueList}`). FilterBar members are `[{ uid, name }]`.
-- Phase 7 done: hardened rules + emulator tests (160 after the Google lookup fix) (`npm run test:rules`, needs Java 21+; `tests/rules.test.js`), a
+- Phase 7 done: hardened rules + emulator tests (203 after the activity log; 14 mutations) (`npm run test:rules`, needs Java 21+; `tests/rules.test.js`), a
   mutation check that proves the tests catch broken rules (`npm run test:rules:mutations`), `docs/SECURITY.md`.
   Rule names written into `projects.members` must equal the user's own `users/{uid}.displayName`.
 - Phase 8 done: offline = refuse to save with a clear error (`lib/network.js` `guardedWrite`, wrap every Firestore
@@ -123,7 +123,10 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
   A verified email may take over a `userEmails` lookup left by a deleted account (rules deployed, tests pass).
   Machine: JDK 21 at `C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot`; JAVA_HOME still points at 17, so set
   JAVA_HOME/PATH for the test command only. Apple sign-in dropped (Mohammed: Google only).
-  Proposed, awaiting approval: owner-only activity log + in-app notifications with "decline with reason".
+  Activity log (owner-only `projects/{id}/activity`, Activity tab) + notifications (`users/{uid}/notifications`, bell in
+  Navbar) + decline with reason (task: unassign + tell the assigner; project: leave + tell the owner). Every entry
+  and notification goes in the SAME writeBatch as its change; rules check it with get/getAfter. Services take
+  `(project, …, uid)`: createTask/updateTask/deleteTask, addMemberByEmail, removeMember, updateProject.
 - Next: phase 10 (delivery). Order: (1) demo script + code-review Q&A prep (explain the Overdue filter:
   `dueDate < today && status !== 'done'`, today = `todayISO()` in Asia/Hebron), (2) 5-8 screenshots in
   `docs/screenshots/` taken by Mohammed in his own browser from the live URL, (3) README LAST (Mohammed's choice):
