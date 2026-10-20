@@ -3,7 +3,10 @@ export const LOCALES = { en: { dir: 'ltr', intl: 'en-GB' }, ar: { dir: 'rtl', in
 export const tr = (lang) => (en, ar) => (lang === 'ar' ? ar : en);
 export function formatDate(iso, lang = 'en', opts = { day: 'numeric', month: 'short' }) {
   if (!iso) return '';
-  return new Intl.DateTimeFormat(LOCALES[lang].intl, { ...opts, timeZone: 'UTC' }).format(new Date(iso + 'T00:00:00Z'));
+  const date = new Date(iso + 'T00:00:00Z');
+  // Bad data must never take the page down (e.g. a rejected write still shown by Firestore's local cache).
+  if (Number.isNaN(date.getTime())) return String(iso);
+  return new Intl.DateTimeFormat(LOCALES[lang].intl, { ...opts, timeZone: 'UTC' }).format(date);
 }
 export const formatNumber = (n, lang = 'en') => new Intl.NumberFormat(LOCALES[lang].intl).format(n);
 /** The app's timezone: "today" is computed here, not in UTC. */
