@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   serverTimestamp,
   updateDoc,
@@ -20,6 +21,12 @@ const clean = ({ title, description, priority, assigneeId, dueDate }) => ({
   assigneeId: assigneeId || null,
   dueDate: dueDate || null,
 });
+
+/** One-shot read of a project's tasks (the dashboard aggregates these client-side; no collection-group query). */
+export async function listTasks(projectId) {
+  const snap = await getDocs(tasksCol(projectId));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
 
 /**
  * Live task list for a project, newest first. Returns the unsubscribe function.
