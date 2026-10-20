@@ -114,6 +114,13 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 - Phase 9 done: live at https://taskflow-be3db.web.app (Firebase Hosting; `firebase.json` `hosting` has the SPA
   rewrite, cache and security headers). Redeploy with `npm run deploy` (needs `.env.local` to build). Demo data (SRS
   Appendix A) is in Firestore: owner + member on "Website Redesign 2026", a second owner-only "Mobile App" project.
-- Next: phase 10 — README last (Mohammed's choice), screenshots (5+), demo/code-review prep. Never type passwords into
-  the live site; test login there by hand.
+- State on 2026-10-21: phases 0–9 done and pushed to GitHub (52 commits, nothing local); Mohammed verified login on the
+  live site. React + Vite is confirmed fine by the instructor (no Next.js migration). Never type passwords into the
+  live site; test login there by hand.
+- Next: phase 10 (delivery). Order: (1) demo script + code-review Q&A prep (explain the Overdue filter:
+  `dueDate < today && status !== 'done'`, today = `todayISO()` in Asia/Hebron), (2) 5-8 screenshots in
+  `docs/screenshots/` taken by Mohammed in his own browser from the live URL, (3) README LAST (Mohammed's choice):
+  overview, features, stack, local setup, env vars, Firestore structure, rules (link `docs/SECURITY.md`), known
+  limits, live URL, demo accounts (public: decide simple passwords), how to run tests, screenshots.
+  Optional phase 11 (bonus) only after that: sort tasks, progress chart, route code-splitting (bundle is 339KB gzip).
 - Mohammed makes all commits himself: prepare the changes and give him the `git add` / `git commit` commands.
