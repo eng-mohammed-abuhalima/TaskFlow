@@ -1,7 +1,8 @@
-import { useEffect, useRef, useId } from 'react';
+import { useCallback, useEffect, useRef, useId, useState } from 'react';
 import { X, TriangleAlert, CircleCheck, CircleAlert, Info } from 'lucide-react';
 import { cx, variants } from '../lib/cx.js';
 import { Icon } from '../lib/icons.jsx';
+import { PortalScope } from '../lib/portal.jsx';
 import { Button } from './Button.jsx';
 
 // #region modal
@@ -23,6 +24,9 @@ export const modalClasses = {
  */
 export function Modal({ open, onClose, title, children, footer, icon, closeLabel = 'Close', inline = false, className }) {
   const ref = useRef(null);
+  // The dialog element as state too, so popups inside can portal into it (see PortalScope).
+  const [dialogNode, setDialogNode] = useState(null);
+  const setRefs = useCallback((node) => { ref.current = node; setDialogNode(node); }, []);
   const titleId = useId();
   useEffect(() => {
     const d = ref.current;
@@ -43,8 +47,8 @@ export function Modal({ open, onClose, title, children, footer, icon, closeLabel
   );
   if (inline) return <div role="dialog" aria-labelledby={titleId} className={cx(modalClasses.inline, className)}>{content}</div>;
   return (
-    <dialog ref={ref} aria-labelledby={titleId} onClose={onClose} onCancel={onClose} className={cx(modalClasses.dialog, className)}>
-      {content}
+    <dialog ref={setRefs} aria-labelledby={titleId} onClose={onClose} onCancel={onClose} className={cx(modalClasses.dialog, className)}>
+      <PortalScope container={dialogNode}>{content}</PortalScope>
     </dialog>
   );
 }
