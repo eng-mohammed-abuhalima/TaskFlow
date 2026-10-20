@@ -318,6 +318,16 @@
     }
   }
 
+  /* Brand panel intro text: fades and rises into place. `both` keeps it hidden during a delay. */
+  --animate-intro-text: intro-text 500ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
+  @keyframes intro-text {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
   --animate-tile-drop: tile-drop 900ms both;
 
   /* Fall (ease-in, gravity), hit with a squash, two shrinking bounces (ease-out up, ease-in down). */

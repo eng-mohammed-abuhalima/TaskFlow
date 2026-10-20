@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CircleAlert, MailCheck } from 'lucide-react';
 import { Icon } from '../lib/icons.jsx';
+import { cx } from '../lib/cx.js';
 import { useMediaQuery } from '../lib/useMediaQuery.js';
 import { Logo, LanguageSwitch, ThemeSwitch } from './Navbar.jsx';
-import { TileBoard } from './TileBoard.jsx';
+import { TileBoard, tileBoardAnimates } from './TileBoard.jsx';
 import { OfflineBanner } from './OfflineBanner.jsx';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 
@@ -15,7 +16,7 @@ import { usePrefs } from '../context/PreferencesContext.jsx';
   switching between Sign in and Create account (or logging out) shows the finished board.
 */
 let introPlayed = false;
-const INTRO_MS = 4000; // the intro itself takes about 3.7s
+const INTRO_MS = 4500; // the intro itself takes about 4.3s (sorting ~3.4s + the move and the tagline)
 
 // #region classes
 export const authClasses = {
@@ -39,6 +40,83 @@ export const authClasses = {
 };
 // #endregion
 
+const INTRO_SCALE = 1.2;
+const PROMPT_GAP = 28; // px between the centred board and the prompt line
+const PROMPT_HEIGHT = 40; // about one line of text-heading; only used to centre board + prompt as a group
+const MOVE_MS = 700;
+
+/*
+  Desktop brand panel. The intro tells a small story:
+  1. The board sits in the middle of the panel, a bit larger, and the tiles fall in scattered,
+     with a prompt under it ("Sort out your scattered tasks").
+  2. The focus tile puts them in order (TileBoard).
+  3. The sorted board glides to its corner, the prompt fades out and the tagline rises in.
+  Replays (`instant`) and prefers-reduced-motion show step 3's end state with no motion.
+  The centre offset is measured before the first paint (FLIP), so the board never jumps.
+*/
+function BrandPanel({ instant, head, sub }) {
+  const { t } = usePrefs();
+  const [animates] = useState(() => tileBoardAnimates(instant));
+  const [settled, setSettled] = useState(!animates);
+  const [intro, setIntro] = useState(null); // { x, y, promptTop } once measured
+  const panelRef = useRef(null);
+  const boardRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (!animates) return;
+    const panel = panelRef.current.getBoundingClientRect();
+    const board = boardRef.current.getBoundingClientRect(); // its resting place: nothing is transformed yet
+    const boardH = board.height * INTRO_SCALE;
+    const groupTop = panel.height / 2 - (boardH + PROMPT_GAP + PROMPT_HEIGHT) / 2;
+    const centreY = groupTop + boardH / 2;
+    // Measured in a layout effect so the centred position is set before the first paint.
+    setIntro({
+      x: panel.left + panel.width / 2 - (board.left + board.width / 2),
+      y: panel.top + centreY - (board.top + board.height / 2),
+      promptTop: groupTop + boardH + PROMPT_GAP,
+    });
+  }, [animates]);
+
+  const centred = !settled && intro;
+  return (
+    <aside ref={panelRef} className={authClasses.panel} aria-hidden="true">
+      <div
+        ref={boardRef}
+        className="w-max"
+        style={{
+          transform: centred ? `translate(${intro.x}px, ${intro.y}px) scale(${INTRO_SCALE})` : 'none',
+          // Only the glide to the corner is animated; jumping to the centre at mount must be instant.
+          transition: settled && animates ? `transform ${MOVE_MS}ms var(--ease-flow)` : undefined,
+          // Hidden only for the instant between mount and measuring, so it never shows in the corner first.
+          visibility: animates && !intro ? 'hidden' : undefined,
+        }}
+      >
+        <TileBoard layout="board" instant={instant} onSorted={() => setSettled(true)} />
+      </div>
+
+      {animates && (
+        <p
+          className="absolute inset-x-12 text-center font-display text-heading font-semibold transition-opacity duration-slow"
+          style={{ top: intro?.promptTop ?? 0, opacity: settled ? 0 : 1 }}
+        >
+          <span className="block animate-intro-text" style={{ animationDelay: '400ms' }}>
+            {t('Sort out your scattered tasks.', 'رتّب مهامك المبعثرة.')}
+          </span>
+        </p>
+      )}
+
+      {/* Stays in the layout from the start so nothing shifts; it only becomes visible once settled. */}
+      <div
+        className={cx('max-w-sm', !settled && 'opacity-0', settled && animates && 'animate-intro-text')}
+        style={animates ? { animationDelay: `${MOVE_MS / 2}ms` } : undefined}
+      >
+        <p className="font-display text-title font-semibold">{head}</p>
+        <p className="mt-3 text-body opacity-85">{sub}</p>
+      </div>
+    </aside>
+  );
+}
+
 export function AuthLayout({ tagline: [head, sub], children }) {
   const { lang, theme, toggleLang, toggleTheme } = usePrefs();
   const wide = useMediaQuery('(min-width: 64rem)');
@@ -52,15 +130,7 @@ export function AuthLayout({ tagline: [head, sub], children }) {
 
   return (
     <div className={authClasses.root}>
-      {wide && (
-        <aside className={authClasses.panel} aria-hidden="true">
-          <TileBoard layout="board" instant={instant} />
-          <div className="max-w-sm">
-            <p className="font-display text-title font-semibold">{head}</p>
-            <p className="mt-3 text-body opacity-85">{sub}</p>
-          </div>
-        </aside>
-      )}
+      {wide && <BrandPanel instant={instant} head={head} sub={sub} />}
       <main className={authClasses.main}>
         <OfflineBanner className="mb-4 rounded-leaf-sm border" />
         <div className={authClasses.header}>
