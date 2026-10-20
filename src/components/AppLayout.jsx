@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Navbar } from './Navbar.jsx';
 import { OfflineBanner } from './OfflineBanner.jsx';
+import { NotificationsBell } from './notifications/NotificationsBell.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 
@@ -42,6 +43,7 @@ export function AppLayout() {
         onNewProject={() => navigate('/projects/new')}
         // ProtectedRoute sends us to /login once the session ends.
         onLogout={logout}
+        notifications={<NotificationsBell />}
       />
       <main id="main" ref={mainRef} tabIndex={-1} className="outline-none">
         <Outlet />

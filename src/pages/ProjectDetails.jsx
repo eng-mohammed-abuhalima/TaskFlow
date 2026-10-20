@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Settings, Plus, ListChecks, CloudOff, SearchX } from 'lucide-react';
+import { Settings, Plus, ListChecks, CloudOff, SearchX, History } from 'lucide-react';
 import { Button } from '../components/Button.jsx';
 import { Breadcrumb } from '../components/Breadcrumb.jsx';
 import { EmptyState, Loading, SkeletonTaskRow } from '../components/States.jsx';
@@ -22,6 +22,8 @@ import { filterTasks, DEFAULT_FILTERS } from '../lib/filterTasks.js';
 import { writeErrorMessage } from '../lib/network.js';
 import { formatNumber, todayISO } from '../lib/i18n.js';
 import { MemberChip } from '../components/Avatar.jsx';
+import { Tabs, TabPanel } from '../components/Tabs.jsx';
+import { ActivityFeed } from '../components/activity/ActivityFeed.jsx';
 
 export default function ProjectDetails() {
   const { id } = useParams();
@@ -42,6 +44,9 @@ function ProjectView({ project, isOwner }) {
   const [toDelete, setToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  // Only the owner has the Activity tab (the rules let only the owner read the log).
+  const [tab, setTab] = useState('tasks');
+  const showing = isOwner ? tab : 'tasks';
 
   const members = projectMembers(project, t('Member', 'عضو'));
   const nameOf = (uid) => members.find((m) => m.uid === uid)?.name ?? (uid ? t('Former member', 'عضو سابق') : null);
@@ -56,10 +61,10 @@ function ProjectView({ project, isOwner }) {
   async function handleSubmit(values) {
     try {
       if (form.task) {
-        await updateTask(project.id, form.task, values);
+        await updateTask(project, form.task, values, user.uid);
         showToast({ tone: 'success', title: t('Task updated', 'تم تحديث المهمة') });
       } else {
-        await createTask(project.id, values, user.uid);
+        await createTask(project, values, user.uid);
         showToast({ tone: 'success', title: t('Task created', 'تم إنشاء المهمة') });
       }
       setForm({ open: false, task: form.task });
@@ -72,7 +77,7 @@ function ProjectView({ project, isOwner }) {
   async function handleDelete() {
     setDeleting(true);
     try {
-      await deleteTask(project.id, toDelete.id);
+      await deleteTask(project, toDelete, user.uid);
       showToast({ tone: 'success', title: t('Task deleted', 'تم حذف المهمة') });
       setToDelete(null);
     } catch (err) {
@@ -114,6 +119,25 @@ function ProjectView({ project, isOwner }) {
         </ul>
       </section>
 
+      {isOwner && (
+        <Tabs
+          idPrefix="project"
+          label={t('Project views', 'عروض المشروع')}
+          value={showing}
+          onChange={setTab}
+          tabs={[
+            { id: 'tasks', label: t('Tasks', 'المهام'), icon: ListChecks },
+            { id: 'activity', label: t('Activity', 'النشاط'), icon: History },
+          ]}
+        />
+      )}
+
+      {showing === 'activity' ? (
+        <TabPanel idPrefix="project" value="activity">
+          <ActivityFeed projectId={project.id} lang={lang} />
+        </TabPanel>
+      ) : (
+      <TabPanel idPrefix="project" value="tasks" bare={!isOwner} className="flex flex-col gap-6">
       {tasks.status === 'loading' ? (
         <Loading label={t('Loading tasks…', 'جارٍ تحميل المهام…')}>
           <ul className={taskListClasses}>{[0, 1, 2].map((i) => <SkeletonTaskRow key={i} />)}</ul>
@@ -164,6 +188,8 @@ function ProjectView({ project, isOwner }) {
             </ul>
           )}
         </>
+      )}
+      </TabPanel>
       )}
 
       <TaskFormModal

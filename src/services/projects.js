@@ -7,12 +7,12 @@ import {
   onSnapshot,
   query,
   serverTimestamp,
-  updateDoc,
   where,
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase.js';
 import { guardedWrite, LONG_WRITE_TIMEOUT_MS } from '../lib/network.js';
+import { logActivity } from './activity.js';
 
 const projectsCol = collection(db, 'projects');
 const BATCH_LIMIT = 500; // Firestore's max writes per batch
@@ -57,21 +57,31 @@ export function subscribeToProject(id, onData, onError) {
   );
 }
 
-export function updateProject(id, values) {
-  return guardedWrite(() => updateDoc(doc(db, 'projects', id), { ...clean(values), updatedAt: serverTimestamp() }));
+/** Saves name/description and logs which of them changed. Owner only (enforced by the rules). */
+export function updateProject(project, values, uid) {
+  return guardedWrite(() => {
+    const data = clean(values);
+    const fields = ['name', 'description'].filter((f) => (project[f] ?? '') !== data[f]);
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'projects', project.id), { ...data, updatedAt: serverTimestamp() });
+    if (fields.length) logActivity(batch, project, uid, { type: 'project_updated', fields });
+    return batch.commit();
+  });
 }
 
 /**
- * Firestore doesn't delete subcollections, so remove the tasks first (in batches),
- * then the project. If a batch fails the project is kept and the delete can be retried.
+ * Firestore doesn't delete subcollections, so remove the activity log and the tasks first
+ * (in batches), then the project. If a batch fails the project is kept and the delete can be retried.
  */
 export function deleteProject(id) {
   return guardedWrite(async () => {
-    const tasks = await getDocs(collection(db, 'projects', id, 'tasks'));
-    for (let i = 0; i < tasks.docs.length; i += BATCH_LIMIT) {
-      const batch = writeBatch(db);
-      tasks.docs.slice(i, i + BATCH_LIMIT).forEach((t) => batch.delete(t.ref));
-      await batch.commit();
+    for (const sub of ['activity', 'tasks']) {
+      const docs = (await getDocs(collection(db, 'projects', id, sub))).docs;
+      for (let i = 0; i < docs.length; i += BATCH_LIMIT) {
+        const batch = writeBatch(db);
+        docs.slice(i, i + BATCH_LIMIT).forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
     }
     await deleteDoc(doc(db, 'projects', id));
   }, LONG_WRITE_TIMEOUT_MS);

@@ -59,7 +59,7 @@ export function LanguageSwitch({ lang = 'en', onToggle }) {
   );
 }
 
-export function Navbar({ lang = 'en', theme = 'light', onTheme, onLang, user = '', current = 'dashboard', onNewProject, onLogout }) {
+export function Navbar({ lang = 'en', theme = 'light', onTheme, onLang, user = '', current = 'dashboard', onNewProject, onLogout, notifications }) {
   const t = (en, ar) => (lang === 'ar' ? ar : en);
   return (
     <header className={navbarClasses.root}>
@@ -75,6 +75,7 @@ export function Navbar({ lang = 'en', theme = 'light', onTheme, onLang, user = '
           {onNewProject && (
             <Button size="md" icon={Plus} onClick={onNewProject} className="max-sm:hidden">{t('New project', 'مشروع جديد')}</Button>
           )}
+          {notifications}
           <LanguageSwitch lang={lang} onToggle={onLang} />
           <ThemeSwitch theme={theme} lang={lang} onToggle={onTheme} />
           <span className="mx-1 hidden h-6 border-s border-subtle md:block" aria-hidden="true" />

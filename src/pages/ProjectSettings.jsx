@@ -8,6 +8,7 @@ import { ConfirmDialog } from '../components/Overlay.jsx';
 import { FullPageLoading } from '../components/routing/FullPageLoading.jsx';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import { useProject } from '../hooks/useProject.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { updateProject, deleteProject } from '../services/projects.js';
@@ -20,6 +21,7 @@ export default function ProjectSettings() {
   const { id } = useParams();
   const { t, lang } = usePrefs();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { status, project, isOwner, reload } = useProject(id);
   // Only for the owner's page; the loading / 403 / 404 views set their own title.
@@ -51,7 +53,7 @@ export default function ProjectSettings() {
 
   async function handleSave(values) {
     try {
-      await updateProject(id, values);
+      await updateProject(project, values, user.uid);
       showToast({ tone: 'success', title: t('Project updated', 'تم تحديث المشروع') });
       navigate(`/projects/${id}`);
     } catch (err) {
@@ -65,7 +67,7 @@ export default function ProjectSettings() {
     if (invalid) return;
     setAdding(true);
     try {
-      const added = await addMemberByEmail(project, email);
+      const added = await addMemberByEmail(project, email, user.uid);
       setEmail('');
       showToast({ tone: 'success', title: t('Member added', 'تمت إضافة العضو'), message: added.displayName });
     } catch (err) {
@@ -85,7 +87,7 @@ export default function ProjectSettings() {
   async function handleRemove() {
     setRemoving(true);
     try {
-      await removeMember(project, toRemove.uid);
+      await removeMember(project, toRemove.uid, user.uid);
       showToast({ tone: 'success', title: t('Member removed', 'تمت إزالة العضو'), message: toRemove.name });
       setToRemove(null);
     } catch (err) {

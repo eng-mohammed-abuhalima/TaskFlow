@@ -7,13 +7,15 @@ import {
   getDocs,
   query,
   serverTimestamp,
-  updateDoc,
   where,
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase.js';
 import { guardedWrite, LONG_WRITE_TIMEOUT_MS } from '../lib/network.js';
 import { findUserByEmail } from './users.js';
+import { logActivity } from './activity.js';
+import { notify } from './notifications.js';
+import { memberName } from '../lib/members.js';
 
 export const MAX_MEMBERS = 20; // keep in sync with firestore.rules
 
@@ -27,19 +29,23 @@ export class MemberError extends Error {
 
 const BATCH_LIMIT = 500; // Firestore's max writes per batch
 
-/** Adds an existing user to the project by email. Owner only (enforced by the rules). */
-export function addMemberByEmail(project, email) {
+/** Adds an existing user to the project by email, logs it and tells them. Owner only (enforced by the rules). */
+export function addMemberByEmail(project, email, actorId) {
   return guardedWrite(async () => {
     const found = await findUserByEmail(email);
     if (!found) throw new MemberError('not-found');
     if (project.memberIds.includes(found.uid)) throw new MemberError('duplicate');
     if (project.memberIds.length >= MAX_MEMBERS) throw new MemberError('full');
 
-    await updateDoc(doc(db, 'projects', project.id), {
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'projects', project.id), {
       memberIds: arrayUnion(found.uid),
       [`members.${found.uid}`]: { displayName: found.displayName },
       updatedAt: serverTimestamp(),
     });
+    logActivity(batch, project, actorId, { type: 'member_added', targetId: found.uid, targetName: found.displayName });
+    notify(batch, project, actorId, found.uid, { type: 'member_added' });
+    await batch.commit();
     return found;
   });
 }
@@ -49,7 +55,7 @@ export function addMemberByEmail(project, email) {
  * project update is in the last batch, so a failure part-way never leaves a removed member
  * still assigned (it only leaves the member in place, and the removal can be retried).
  */
-export function removeMember(project, uid) {
+export function removeMember(project, uid, actorId) {
   return guardedWrite(async () => {
     const assigned = await getDocs(query(collection(db, 'projects', project.id, 'tasks'), where('assigneeId', '==', uid)));
     const projectRef = doc(db, 'projects', project.id);
@@ -60,13 +66,16 @@ export function removeMember(project, uid) {
     };
 
     const chunks = [];
-    for (let i = 0; i < assigned.docs.length; i += BATCH_LIMIT - 1) chunks.push(assigned.docs.slice(i, i + BATCH_LIMIT - 1));
+    for (let i = 0; i < assigned.docs.length; i += BATCH_LIMIT - 2) chunks.push(assigned.docs.slice(i, i + BATCH_LIMIT - 2));
     if (chunks.length === 0) chunks.push([]);
 
     for (const [i, chunk] of chunks.entries()) {
       const batch = writeBatch(db);
       chunk.forEach((task) => batch.update(task.ref, { assigneeId: null, updatedAt: serverTimestamp() }));
-      if (i === chunks.length - 1) batch.update(projectRef, removal);
+      if (i === chunks.length - 1) {
+        batch.update(projectRef, removal);
+        logActivity(batch, project, actorId, { type: 'member_removed', targetId: uid, targetName: memberName(project, uid) });
+      }
       await batch.commit();
     }
   }, LONG_WRITE_TIMEOUT_MS);
