@@ -38,5 +38,16 @@ export function validateDescription(description, t) {
   }
 }
 
+export const TASK_TITLE = { min: 3, max: 120 };
+export const TASK_STATUSES = ['todo', 'in_progress', 'done'];
+export const TASK_PRIORITIES = ['low', 'medium', 'high'];
+
+export function validateTaskTitle(title, t) {
+  const n = title.trim();
+  if (!n) return t('Title is required.', 'العنوان مطلوب.');
+  if (n.length < TASK_TITLE.min) return t(`Title needs at least ${TASK_TITLE.min} characters`, `يجب أن يتكون العنوان من ${TASK_TITLE.min} أحرف على الأقل`);
+  if (n.length > TASK_TITLE.max) return t(`Title can be at most ${TASK_TITLE.max} characters`, `يجب ألا يتجاوز العنوان ${TASK_TITLE.max} حرفًا`);
+}
+
 /** Drops undefined entries so `Object.keys(errors).length` means "has errors". */
 export const compact = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v));
