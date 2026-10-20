@@ -9,6 +9,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase.js';
+import { guardedWrite } from '../lib/network.js';
 
 const tasksCol = (projectId) => collection(db, 'projects', projectId, 'tasks');
 const taskDoc = (projectId, taskId) => doc(db, 'projects', projectId, 'tasks', taskId);
@@ -46,13 +47,15 @@ export function subscribeToTasks(projectId, onData, onError) {
 
 /** New tasks always start as "todo" (SRS FR-11); the rules enforce it too. */
 export function createTask(projectId, values, uid) {
-  return addDoc(tasksCol(projectId), {
-    ...clean(values),
-    status: 'todo',
-    createdBy: uid,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+  return guardedWrite(() =>
+    addDoc(tasksCol(projectId), {
+      ...clean(values),
+      status: 'todo',
+      createdBy: uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  );
 }
 
 /**
@@ -62,9 +65,9 @@ export function createTask(projectId, values, uid) {
 export function updateTask(projectId, task, values) {
   const changes = { ...clean(values), updatedAt: serverTimestamp() };
   if (values.status !== task.status) changes.status = values.status;
-  return updateDoc(taskDoc(projectId, task.id), changes);
+  return guardedWrite(() => updateDoc(taskDoc(projectId, task.id), changes));
 }
 
 export function deleteTask(projectId, taskId) {
-  return deleteDoc(taskDoc(projectId, taskId));
+  return guardedWrite(() => deleteDoc(taskDoc(projectId, taskId)));
 }

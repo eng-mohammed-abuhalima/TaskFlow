@@ -12,6 +12,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase.js';
+import { guardedWrite, LONG_WRITE_TIMEOUT_MS } from '../lib/network.js';
 
 const projectsCol = collection(db, 'projects');
 const BATCH_LIMIT = 500; // Firestore's max writes per batch
@@ -24,14 +25,16 @@ const clean = ({ name, description }) => ({ name: name.trim(), description: desc
  * names without reading each other's private user documents.
  */
 export async function createProject(values, user) {
-  const ref = await addDoc(projectsCol, {
-    ...clean(values),
-    ownerId: user.uid,
-    memberIds: [user.uid],
-    members: { [user.uid]: { displayName: user.displayName || user.email.split('@')[0] } },
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+  const ref = await guardedWrite(() =>
+    addDoc(projectsCol, {
+      ...clean(values),
+      ownerId: user.uid,
+      memberIds: [user.uid],
+      members: { [user.uid]: { displayName: user.displayName || user.email.split('@')[0] } },
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  );
   return ref.id;
 }
 
@@ -55,19 +58,21 @@ export function subscribeToProject(id, onData, onError) {
 }
 
 export function updateProject(id, values) {
-  return updateDoc(doc(db, 'projects', id), { ...clean(values), updatedAt: serverTimestamp() });
+  return guardedWrite(() => updateDoc(doc(db, 'projects', id), { ...clean(values), updatedAt: serverTimestamp() }));
 }
 
 /**
  * Firestore doesn't delete subcollections, so remove the tasks first (in batches),
  * then the project. If a batch fails the project is kept and the delete can be retried.
  */
-export async function deleteProject(id) {
-  const tasks = await getDocs(collection(db, 'projects', id, 'tasks'));
-  for (let i = 0; i < tasks.docs.length; i += BATCH_LIMIT) {
-    const batch = writeBatch(db);
-    tasks.docs.slice(i, i + BATCH_LIMIT).forEach((t) => batch.delete(t.ref));
-    await batch.commit();
-  }
-  await deleteDoc(doc(db, 'projects', id));
+export function deleteProject(id) {
+  return guardedWrite(async () => {
+    const tasks = await getDocs(collection(db, 'projects', id, 'tasks'));
+    for (let i = 0; i < tasks.docs.length; i += BATCH_LIMIT) {
+      const batch = writeBatch(db);
+      tasks.docs.slice(i, i + BATCH_LIMIT).forEach((t) => batch.delete(t.ref));
+      await batch.commit();
+    }
+    await deleteDoc(doc(db, 'projects', id));
+  }, LONG_WRITE_TIMEOUT_MS);
 }

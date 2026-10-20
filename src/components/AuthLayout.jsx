@@ -4,6 +4,7 @@ import { Icon } from '../lib/icons.jsx';
 import { useMediaQuery } from '../lib/useMediaQuery.js';
 import { Logo, LanguageSwitch, ThemeSwitch } from './Navbar.jsx';
 import { TileBoard } from './TileBoard.jsx';
+import { OfflineBanner } from './OfflineBanner.jsx';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 
 /*
@@ -60,6 +61,7 @@ export function AuthLayout({ tagline: [head, sub], children }) {
         </aside>
       )}
       <main className={authClasses.main}>
+        <OfflineBanner className="mb-4 rounded-leaf-sm border" />
         <div className={authClasses.header}>
           <Logo />
           <div className="flex items-center gap-1">
