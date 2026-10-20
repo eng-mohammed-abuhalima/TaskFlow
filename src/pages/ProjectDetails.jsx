@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Settings, Plus, ListChecks, CloudOff } from 'lucide-react';
+import { Settings, Plus, ListChecks, CloudOff, SearchX } from 'lucide-react';
 import { Button } from '../components/Button.jsx';
 import { Breadcrumb } from '../components/Breadcrumb.jsx';
 import { EmptyState, Loading, SkeletonTaskRow } from '../components/States.jsx';
 import { TaskRow, taskListClasses } from '../components/Task.jsx';
 import { TaskFormModal } from '../components/TaskFormModal.jsx';
+import { FilterBar } from '../components/FilterBar.jsx';
 import { ConfirmDialog } from '../components/Overlay.jsx';
 import { ProjectStatusView } from '../components/ProjectStatusView.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -15,7 +16,10 @@ import { useProject } from '../hooks/useProject.js';
 import { useTasks } from '../hooks/useTasks.js';
 import { createTask, updateTask, deleteTask } from '../services/tasks.js';
 import { canEditTask, canDeleteTask, canChangeStatus } from '../lib/permissions.js';
-import { todayISO } from '../lib/i18n.js';
+import { projectMembers } from '../lib/members.js';
+import { filterTasks, DEFAULT_FILTERS } from '../lib/filterTasks.js';
+import { formatNumber, todayISO } from '../lib/i18n.js';
+import { MemberChip } from '../components/Avatar.jsx';
 
 export default function ProjectDetails() {
   const { id } = useParams();
@@ -34,14 +38,14 @@ function ProjectView({ project, isOwner }) {
   const [form, setForm] = useState({ open: false, task: null });
   const [toDelete, setToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
 
-  // Member names arrive with membership management (phase 5); until then only "you" is known.
-  const members = project.memberIds.map((uid) => ({
-    uid,
-    name: uid === user.uid ? user.displayName || user.email : t('Member', 'عضو'),
-  }));
+  const members = projectMembers(project, t('Member', 'عضو'));
   const nameOf = (uid) => members.find((m) => m.uid === uid)?.name ?? (uid ? t('Former member', 'عضو سابق') : null);
   const today = todayISO();
+  const visible = filterTasks(tasks.tasks, filters, today);
+  const setFilter = (change) => setFilters((f) => ({ ...f, ...change }));
+  const clearFilters = () => setFilters(DEFAULT_FILTERS);
 
   const saveFailed = () =>
     showToast({
@@ -99,6 +103,17 @@ function ProjectView({ project, isOwner }) {
         </div>
       </header>
 
+      <section aria-labelledby="members" className="flex flex-col gap-3 md:flex-row md:items-center">
+        <h2 id="members" className="flex shrink-0 items-center gap-2 whitespace-nowrap text-label font-medium text-fg-muted">
+          {t('Members', 'الأعضاء')} <span className="tabular-nums">· {formatNumber(members.length, lang)}</span>
+        </h2>
+        <ul className="flex flex-wrap gap-2">
+          {members.map((m) => (
+            <li key={m.uid}><MemberChip name={m.name} owner={m.uid === project.ownerId} ownerLabel={t('Owner', 'المالك')} /></li>
+          ))}
+        </ul>
+      </section>
+
       {tasks.status === 'loading' ? (
         <Loading label={t('Loading tasks…', 'جارٍ تحميل المهام…')}>
           <ul className={taskListClasses}>{[0, 1, 2].map((i) => <SkeletonTaskRow key={i} />)}</ul>
@@ -114,20 +129,41 @@ function ProjectView({ project, isOwner }) {
           {t('Split the work into tasks with an owner and a due date.', 'قسّم العمل إلى مهام لكل منها مسؤول وموعد.')}
         </EmptyState>
       ) : (
-        <ul className={taskListClasses} aria-label={t('Tasks', 'المهام')}>
-          {tasks.tasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={{ ...task, due: task.dueDate, assignee: nameOf(task.assigneeId) }}
-              lang={lang}
-              today={today}
-              canEdit={canEditTask(task, project, user.uid)}
-              canDelete={canDeleteTask(task, project, user.uid)}
-              onEdit={() => setForm({ open: true, task })}
-              onDelete={() => setToDelete(task)}
-            />
-          ))}
-        </ul>
+        <>
+          <FilterBar
+            lang={lang}
+            query={filters.q} onQuery={(q) => setFilter({ q })}
+            status={filters.status} onStatus={(status) => setFilter({ status })}
+            priority={filters.priority} onPriority={(priority) => setFilter({ priority })}
+            assignee={filters.assignee} onAssignee={(assignee) => setFilter({ assignee })}
+            overdue={filters.overdue} onOverdue={(overdue) => setFilter({ overdue })}
+            members={members}
+            count={formatNumber(visible.length, lang)}
+            total={formatNumber(tasks.tasks.length, lang)}
+            onClear={clearFilters}
+          />
+          {visible.length === 0 ? (
+            <EmptyState icon={SearchX} title={t('No tasks match these filters', 'لا توجد مهام تطابق هذه المرشحات')}
+              action={<Button variant="secondary" onClick={clearFilters}>{t('Clear filters', 'مسح المرشحات')}</Button>}>
+              {t('Try a different keyword or clear a filter.', 'جرّب كلمة أخرى أو امسح أحد المرشحات.')}
+            </EmptyState>
+          ) : (
+            <ul className={taskListClasses} aria-label={t('Tasks', 'المهام')}>
+              {visible.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={{ ...task, due: task.dueDate, assignee: nameOf(task.assigneeId) }}
+                  lang={lang}
+                  today={today}
+                  canEdit={canEditTask(task, project, user.uid)}
+                  canDelete={canDeleteTask(task, project, user.uid)}
+                  onEdit={() => setForm({ open: true, task })}
+                  onDelete={() => setToDelete(task)}
+                />
+              ))}
+            </ul>
+          )}
+        </>
       )}
 
       <TaskFormModal
