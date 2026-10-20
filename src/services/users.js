@@ -141,7 +141,11 @@ export function authErrorMessage(error, t) {
       return t('Too many attempts. Wait a moment and try again.', 'محاولات كثيرة. انتظر قليلًا ثم حاول مجددًا.');
     case 'auth/network-request-failed':
       return t('No connection. Check your internet and try again.', 'لا يوجد اتصال. تحقق من الإنترنت وحاول مجددًا.');
-    default:
-      return t('Something went wrong. Please try again.', 'حدث خطأ ما. حاول مجددًا.');
+    default: {
+      // Unexpected: keep the code visible (and in the console) so it can be reported and traced.
+      console.error('Auth flow failed:', error);
+      const code = error?.code ? ` (${error.code})` : '';
+      return t(`Something went wrong${code}. Please try again.`, `حدث خطأ ما${code}. حاول مجددًا.`);
+    }
   }
 }

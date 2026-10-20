@@ -50,12 +50,20 @@ service cloud.firestore {
         && validName(request.resource.data.displayName);
 
       // Only the account's own owner, and only the name (also fills it in for older accounts).
+      // Or: a lookup left behind by a deleted account is taken over by the email's new account,
+      // but only with a VERIFIED email (e.g. Google sign-in). Firebase allows one account per
+      // email, so a verified token for this email proves the caller owns it now.
       allow update: if signedIn()
         && email == request.auth.token.email
-        && resource.data.uid == request.auth.uid
         && request.resource.data.keys().hasOnly(['uid', 'displayName'])
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
-        && validName(request.resource.data.displayName);
+        && validName(request.resource.data.displayName)
+        && (
+          (resource.data.uid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName']))
+          || (request.auth.token.email_verified == true
+            && request.resource.data.keys().hasAll(['uid', 'displayName'])
+            && request.resource.data.uid == request.auth.uid)
+        );
 
       allow delete: if false;
     }

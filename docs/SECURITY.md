@@ -39,6 +39,9 @@ collection-group queries over all tasks.
   on the next request, and open pages flip to "access denied").
 - **Privacy**: `users/{uid}` is private. Members see each other's names only through the project's own
   `members` map. `userEmails` can only be read one document at a time, so emails can't be dumped.
+- **Email lookups can't be hijacked**: only the account whose sign-in email *is* that email can write its
+  lookup. A lookup left behind by a deleted account can be taken over by the email's new account only
+  with a **verified** email (e.g. Google sign-in), because Firebase allows one account per email.
 - **No secrets in the repo**: the Firebase web config is public by design (`.env.example` lists names
   only); no service-account key exists anywhere.
 
@@ -73,14 +76,14 @@ refuses older versions and prints an error). The first run downloads the emulato
 
 ## Test results
 
-**Automated (`npm run test:rules`): 154 tests in 12 groups, 154 pass.** Every group tests what must be
+**Automated (`npm run test:rules`): 160 tests in 12 groups, 160 pass.** Every group tests what must be
 *allowed* and what must be *denied*, for the owner, a member, an outsider and a signed-out visitor:
 
 | Group | What it covers |
 |---|---|
 | Signed-out visitors | nothing readable or writable |
 | `users/{uid}` | own profile only; no listing; field and name validation; email/`createdAt` immutable |
-| `userEmails/{email}` | one lookup at a time, no listing; can only register / rename your own email |
+| `userEmails/{email}` | one lookup at a time, no listing; can only register / rename your own email; a verified email takes over a leftover lookup, an unverified one can't |
 | Reading projects | members yes, outsiders no (TC-13), 404 vs 403, filtered listing only |
 | Creating projects | owner is the creator, exact fields, name/description limits, server timestamps, real profile name |
 | Updating / deleting projects | owner only (TC-06), immutable `ownerId` / `createdAt`, validation |
@@ -91,10 +94,10 @@ refuses older versions and prints an error). The first run downloads the emulato
 | Deleting tasks | owner or creator only; orphaned tasks stay unreachable |
 | Everything else | unknown collections and subcollections are closed |
 
-**The tests themselves are tested** (`npm run test:rules:mutations`): the rules are broken on purpose in 8
+**The tests themselves are tested** (`npm run test:rules:mutations`): the rules are broken on purpose in 9
 ways (a member can edit the project, anyone can change a status, emails can be listed, names can be
 forged, any month is accepted, `createdBy` can be changed, a member can delete any task, an outsider can
-read tasks) and the suite must fail each time. **All 8 were caught**, each by the tests named after that
+read tasks, an unverified email can take over a lookup) and the suite must fail each time. **All 9 were caught**, each by the tests named after that
 behaviour (1 to 5 failing tests per break), so a passing run isn't just tests that can't fail.
 
 **Against the real project (hardened rules deployed):** a script using the app's own services created a

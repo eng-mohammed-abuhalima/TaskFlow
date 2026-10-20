@@ -126,6 +126,36 @@ describe('userEmails/{email} (lookup for "add member by email")', () => {
   denies('changing the uid of your lookup', () => updateDoc(lookupRef('owner'), { uid: 'member' }));
   denies('updating someone else’s lookup', () => updateDoc(doc(as('owner'), 'userEmails', email('member')), { displayName: 'Hacked' }));
   denies('deleting your lookup', () => deleteDoc(lookupRef('owner')));
+
+  // A lookup left behind by a deleted account ('gone'), for an email that now has a new account ('reborn').
+  const leftover = () => env.withSecurityRulesDisabled((ctx) =>
+    setDoc(doc(ctx.firestore(), 'userEmails', email('reborn')), { uid: 'gone', displayName: 'Old Account' }));
+  const signedInAs = (uid, verified) =>
+    env.authenticatedContext(uid, { email: email(uid), email_verified: verified }).firestore();
+  const reclaim = (db, data, key = email('reborn')) => setDoc(doc(db, 'userEmails', key), data);
+
+  allows('a verified owner of the email taking over a leftover lookup', async () => {
+    await leftover();
+    return reclaim(signedInAs('reborn', true), lookup('reborn'));
+  });
+  denies('taking over a leftover lookup with an unverified email', async () => {
+    await leftover();
+    return reclaim(signedInAs('reborn', false), lookup('reborn'));
+  });
+  denies('taking over a leftover lookup for another uid', async () => {
+    await leftover();
+    return reclaim(signedInAs('reborn', true), lookup('owner'));
+  });
+  denies('taking over a leftover lookup with an extra field', async () => {
+    await leftover();
+    return reclaim(signedInAs('reborn', true), lookup('reborn', { isAdmin: true }));
+  });
+  denies('taking over a leftover lookup with a one-letter name', async () => {
+    await leftover();
+    return reclaim(signedInAs('reborn', true), lookup('reborn', { displayName: 'A' }));
+  });
+  denies('a verified user taking over someone else’s lookup', () =>
+    reclaim(signedInAs('outsider', true), lookup('outsider'), email('member')));
 });
 
 describe('reading projects', () => {

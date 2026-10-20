@@ -104,7 +104,7 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 - Phase 6 done: `lib/filterTasks.js` (pure, AND-combined filters incl. overdue) + `FilterBar` on the project page;
   real dashboard (`useDashboard` loads projects + their tasks, `lib/taskStats.js` aggregates client-side,
   `components/dashboard/{StatusBreakdown,OverdueList}`). FilterBar members are `[{ uid, name }]`.
-- Phase 7 done: hardened rules + 154 emulator tests (`npm run test:rules`, needs Java 21+; `tests/rules.test.js`), a
+- Phase 7 done: hardened rules + emulator tests (160 after the Google lookup fix) (`npm run test:rules`, needs Java 21+; `tests/rules.test.js`), a
   mutation check that proves the tests catch broken rules (`npm run test:rules:mutations`), `docs/SECURITY.md`.
   Rule names written into `projects.members` must equal the user's own `users/{uid}.displayName`.
 - Phase 8 done: offline = refuse to save with a clear error (`lib/network.js` `guardedWrite`, wrap every Firestore

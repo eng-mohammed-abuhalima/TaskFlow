@@ -19,6 +19,7 @@ const mutations = [
   ['task createdBy can be changed', '&& request.resource.data.createdBy == resource.data.createdBy', '&& true'],
   ['a member can delete any task', 'allow delete: if ownsProject() || (inProject() && resource.data.createdBy == request.auth.uid);', 'allow delete: if inProject();'],
   ['an outsider can read tasks', 'allow read: if inProject();', 'allow read: if signedIn();'],
+  ['an unverified email can take over a lookup', '|| (request.auth.token.email_verified == true', '|| (true'],
 ];
 
 const clean = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
