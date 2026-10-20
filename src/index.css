@@ -466,10 +466,20 @@
 }
 
 /* User-written text (project names, task titles…) may be English in the Arabic UI or the reverse.
-   Each paragraph takes its direction from its own first strong letter, so punctuation lands on the
-   right side, while alignment still follows the page. */
+   plaintext: each paragraph takes its direction from its own first strong letter, so punctuation
+   lands on the right side. But plaintext also makes `text-align: start` follow the text's own
+   direction, so an English title in the Arabic UI would drift to the left edge of its cell and
+   leave a ragged gap. Alignment is therefore pinned to the PAGE direction (physical values on purpose). */
 @utility user-text {
   unicode-bidi: plaintext;
+
+  [dir="rtl"] & {
+    text-align: right;
+  }
+
+  [dir="ltr"] & {
+    text-align: left;
+  }
 }
 
 /* Grows the hit area of small controls to 44x44 without changing layout. */
