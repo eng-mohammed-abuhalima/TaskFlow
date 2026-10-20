@@ -11,9 +11,9 @@ export const taskRowClasses = {
   root:
     'group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2.5 px-4 py-3.5 transition-colors duration-fast ease-flow hover:bg-surface-hover ' +
     'lg:grid-cols-[minmax(0,1fr)_9rem_6.5rem_8.5rem_7.5rem_auto] lg:items-center lg:gap-4 motion-reduce:transition-none',
-  title: 'text-body font-medium text-fg',
+  title: 'user-text break-words text-body font-medium text-fg',
   titleDone: 'text-fg-muted',
-  desc: 'mt-0.5 line-clamp-1 text-body-sm text-fg-muted',
+  desc: 'user-text mt-0.5 line-clamp-1 text-body-sm text-fg-muted',
   meta: 'col-span-2 flex flex-wrap items-center gap-x-3 gap-y-2 lg:contents',
   assignee: 'inline-flex min-w-0 items-center gap-2 text-body-sm text-fg-muted',
   actions: 'col-start-2 row-start-1 flex items-center gap-0.5 lg:col-start-auto lg:row-start-auto',
