@@ -93,6 +93,11 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 - Phase 4 done: tasks CRUD (`services/tasks.js` live via onSnapshot, `useTasks`, `TaskFormModal`,
   `lib/permissions.js` mirrors the task rules — keep them in sync). New tasks always start as `todo`.
   `Modal` wraps content in `PortalScope` so Radix popups inside a `<dialog>` stay clickable.
-  Member-role task tests (creator / assignee) still pending until members exist (phase 5).
-- Next: membership (decide how members see each other's names first) → firestore.rules + tests with a second account → deploy.
+- Phase 5 done: membership. `projects/{id}.members = { uid: { displayName } }` mirrors `memberIds` (that is how
+  members see each other's names; `users/{uid}` stays private). `userEmails/{email}` = `{ uid, displayName }`.
+  `services/members.js` (add by email / remove + unassign tasks in one batch), `lib/members.js`
+  (`projectMembers`), `useProject` is live (`onSnapshot`). Test members are added/removed through the UI.
+- TileBoard intro is wired into `AuthLayout` (board on lg+, band card below). It plays once per page load;
+  `TileBoard` takes `instant` to render the finished board (used when switching Sign in <-> Create account).
+- Next: phase 6 — search/filters (`lib/filterTasks.js`) and the real dashboard (stats + overdue list).
 - Mohammed makes all commits himself: prepare the changes and give him the `git add` / `git commit` commands.
