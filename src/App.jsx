@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { DirectionProvider } from '@radix-ui/react-direction';
 import { usePrefs } from './context/PreferencesContext.jsx';
 import { useAuth } from './context/AuthContext.jsx';
@@ -6,6 +6,7 @@ import { ProtectedRoute } from './components/routing/ProtectedRoute.jsx';
 import { PublicOnlyRoute } from './components/routing/PublicOnlyRoute.jsx';
 import { FullPageLoading } from './components/routing/FullPageLoading.jsx';
 import { AppLayout } from './components/AppLayout.jsx';
+import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import Dashboard from './pages/Dashboard.jsx';
@@ -28,8 +29,11 @@ function HomeRedirect() {
 
 export default function App() {
   const { dir } = usePrefs();
+  const { pathname } = useLocation();
   return (
     <DirectionProvider dir={dir}>
+      {/* resetKey: moving to another page clears a crash, so one broken page doesn't block the rest */}
+      <ErrorBoundary resetKey={pathname}>
       <Routes>
         <Route path="/" element={<HomeRedirect />} />
 
@@ -49,6 +53,7 @@ export default function App() {
 
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </ErrorBoundary>
     </DirectionProvider>
   );
 }
