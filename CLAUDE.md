@@ -89,7 +89,9 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
   Test account credentials live in git-ignored `test-accounts.local`; never print them.
 - Phase 3 done: projects CRUD (`services/projects.js`, `useProject` + `ProjectStatusView` for 404/403,
   `ToastContext` → `useToast()`, `ProjectForm`, `Breadcrumb`). Wrap user-entered text in the `user-text`
-  utility (unicode-bidi: plaintext) instead of setting `dir`. Logout goes through `useAuth().logout`.
+  utility (unicode-bidi: plaintext for punctuation, alignment pinned to the page direction so English text in
+  the Arabic UI doesn't drift to the wrong edge of its cell) instead of setting `dir`.
+  Logout goes through `useAuth().logout`.
 - Phase 4 done: tasks CRUD (`services/tasks.js` live via onSnapshot, `useTasks`, `TaskFormModal`,
   `lib/permissions.js` mirrors the task rules — keep them in sync). New tasks always start as `todo`.
   `Modal` wraps content in `PortalScope` so Radix popups inside a `<dialog>` stay clickable.
@@ -102,5 +104,12 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 - Phase 6 done: `lib/filterTasks.js` (pure, AND-combined filters incl. overdue) + `FilterBar` on the project page;
   real dashboard (`useDashboard` loads projects + their tasks, `lib/taskStats.js` aggregates client-side,
   `components/dashboard/{StatusBreakdown,OverdueList}`). FilterBar members are `[{ uid, name }]`.
-- Next: phase 7 — security rules hardening + tests with a second account (rules tests on the emulator are optional).
+- Phase 7 done: hardened rules + 154 emulator tests (`npm run test:rules`, needs Java 21+; `tests/rules.test.js`), a
+  mutation check that proves the tests catch broken rules (`npm run test:rules:mutations`), `docs/SECURITY.md`.
+  Rule names written into `projects.members` must equal the user's own `users/{uid}.displayName`.
+- Phase 8 done: offline = refuse to save with a clear error (`lib/network.js` `guardedWrite`, wrap every Firestore
+  write in services with it; `writeErrorMessage` for the text), `OfflineBanner`, `ErrorBoundary`, `usePageTitle` on every
+  page, `AppLayout` owns `<main id="main">` + skip link + focus on navigation (pages render a `div`, never their own `main`).
+  Stat cards are not headings. Verified across 3 sizes x 2 languages x 2 themes.
+- Next: phase 9 — deploy (Vercel or Firebase Hosting), SPA rewrites, authorized domain, demo data.
 - Mohammed makes all commits himself: prepare the changes and give him the `git add` / `git commit` commands.
