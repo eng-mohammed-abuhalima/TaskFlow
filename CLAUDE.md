@@ -117,6 +117,13 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 - State on 2026-10-21: phases 0–9 done and pushed to GitHub (52 commits, nothing local); Mohammed verified login on the
   live site. React + Vite is confirmed fine by the instructor (no Next.js migration). Never type passwords into the
   live site; test login there by hand.
+- Added on 2026-10-21 (Mohammed's requests): Remember me (IndexedDB vs session persistence), `/forgot-password`,
+  favicon, autofill colours, delayed full-page spinner, new sign-in intro story (`BrandPanel` in AuthLayout),
+  Google sign-in (`GoogleSignIn`, provider enabled in Console; first sign-in writes the same profile + lookup).
+  A verified email may take over a `userEmails` lookup left by a deleted account (rules deployed, tests pass).
+  Machine: JDK 21 at `C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot`; JAVA_HOME still points at 17, so set
+  JAVA_HOME/PATH for the test command only. Apple sign-in dropped (Mohammed: Google only).
+  Proposed, awaiting approval: owner-only activity log + in-app notifications with "decline with reason".
 - Next: phase 10 (delivery). Order: (1) demo script + code-review Q&A prep (explain the Overdue filter:
   `dueDate < today && status !== 'done'`, today = `todayISO()` in Asia/Hebron), (2) 5-8 screenshots in
   `docs/screenshots/` taken by Mohammed in his own browser from the live URL, (3) README LAST (Mohammed's choice):
