@@ -16,8 +16,8 @@ service cloud.firestore {
       return name is string && name.trim().size() >= 2 && name.size() <= 60;
     }
 
-    // Public profile. Only the owner reads or writes it for now
-    // (phase 5 decides how project members see each other's names).
+    // Private profile: only its owner reads or writes it. Project members see each other's names
+    // through projects/{id}.members instead (a copy kept by the project owner).
     match /users/{uid} {
       allow read: if isSelf(uid);
 
@@ -35,18 +35,29 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Email -> uid lookup for "add member by email".
-    // get only (no list), so nobody can dump every registered email.
+    // Email -> { uid, displayName } lookup for "add member by email".
+    // get only (no list), so nobody can dump every registered email. It exposes just a name
+    // to someone who already knows the email.
     match /userEmails/{email} {
       allow get: if signedIn();
       allow list: if false;
 
       allow create: if signedIn()
         && email == request.auth.token.email
-        && request.resource.data.keys().hasOnly(['uid'])
-        && request.resource.data.uid == request.auth.uid;
+        && request.resource.data.keys().hasOnly(['uid', 'displayName'])
+        && request.resource.data.keys().hasAll(['uid', 'displayName'])
+        && request.resource.data.uid == request.auth.uid
+        && validName(request.resource.data.displayName);
 
-      allow update, delete: if false;
+      // Only the account's own owner, and only the name (also fills it in for older accounts).
+      allow update: if signedIn()
+        && email == request.auth.token.email
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'displayName'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
+        && validName(request.resource.data.displayName);
+
+      allow delete: if false;
     }
 
     function validProjectFields(data) {
@@ -68,20 +79,57 @@ service cloud.firestore {
       // Queries must be limited to the user's own projects (where memberIds array-contains uid).
       allow list: if signedIn() && isMember();
 
+      // `members` mirrors `memberIds` with a display name per member.
+      function validMemberEntry(entry) {
+        return entry is map && entry.keys().hasOnly(['displayName']) && validName(entry.displayName);
+      }
+
+      // The owner changes membership one person at a time. Allowed shapes:
+      //  - add one existing user (appended to memberIds, with a name entry),
+      //  - remove one non-owner member,
+      //  - first-time `members` for a project made before that field existed (owner only).
+      function validMembership() {
+        let before = resource.data;
+        let after = request.resource.data;
+        let ids = after.memberIds;
+        let n = before.memberIds.size();
+        return ids is list
+          && after.members is map
+          && ids.toSet().size() == ids.size()
+          && ids.hasAll([before.ownerId])
+          && ids.size() <= 20
+          && after.members.keys().toSet() == ids.toSet()
+          && (
+            (!('members' in before) && ids == [before.ownerId] && validMemberEntry(after.members[before.ownerId]))
+            || (ids.size() == n + 1
+                && ids[0:n] == before.memberIds
+                && exists(/databases/$(database)/documents/users/$(ids[n]))
+                && validMemberEntry(after.members[ids[n]])
+                && after.members.diff(before.members).affectedKeys().hasOnly([ids[n]]))
+            || (ids.size() == n - 1
+                && ids.hasOnly(before.memberIds)
+                && after.members.diff(before.members).affectedKeys().size() == 1)
+          );
+      }
+
       allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['name', 'description', 'ownerId', 'memberIds', 'createdAt', 'updatedAt'])
-        && request.resource.data.keys().hasAll(['name', 'description', 'ownerId', 'memberIds', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['name', 'description', 'ownerId', 'memberIds', 'members', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['name', 'description', 'ownerId', 'memberIds', 'members', 'createdAt', 'updatedAt'])
         && validProjectFields(request.resource.data)
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.memberIds == [request.auth.uid]
+        && request.resource.data.members is map
+        && request.resource.data.members.keys() == [request.auth.uid]
+        && validMemberEntry(request.resource.data.members[request.auth.uid])
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
 
-      // Owner only, and only name / description for now (members are managed in phase 5).
+      // Owner only: details and membership. ownerId / createdAt never change.
       allow update: if signedIn() && isOwner()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'updatedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'memberIds', 'members', 'updatedAt'])
         && validProjectFields(request.resource.data)
-        && request.resource.data.updatedAt == request.time;
+        && request.resource.data.updatedAt == request.time
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['memberIds', 'members']) || validMembership());
 
       allow delete: if signedIn() && isOwner();
 
