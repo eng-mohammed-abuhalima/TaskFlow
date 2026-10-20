@@ -2,7 +2,9 @@ import {
   browserSessionPersistence,
   indexedDBLocalPersistence,
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   sendPasswordResetEmail,
+  signInWithPopup,
   setPersistence,
   signInWithEmailAndPassword,
   signOut,
@@ -49,6 +51,55 @@ export async function loginUser({ email, password, remember = true }) {
   return signInWithEmailAndPassword(auth, normalizeEmail(email), password);
 }
 
+// The rules accept names of 2-60 characters. A Google account may have no name, or a longer one.
+function profileName(name, email) {
+  const fromAccount = (name || '').trim();
+  const fallback = email.split('@')[0];
+  const picked = fromAccount.length >= 2 ? fromAccount : fallback.length >= 2 ? fallback : 'TaskFlow user';
+  return picked.slice(0, 60).trim();
+}
+
+/**
+ * First sign-in with Google: write the same profile + email lookup that registerUser writes.
+ * Returning users already have them, so for them this is a single read.
+ */
+async function ensureProfile(user) {
+  const profileRef = doc(db, 'users', user.uid);
+  if ((await getDoc(profileRef)).exists()) return;
+
+  const emailLower = normalizeEmail(user.email || '');
+  const displayName = profileName(user.displayName, emailLower);
+  if (user.displayName !== displayName) await updateProfile(user, { displayName });
+
+  const batch = writeBatch(db);
+  batch.set(profileRef, { displayName, email: emailLower, createdAt: serverTimestamp() });
+  batch.set(doc(db, 'userEmails', emailLower), { uid: user.uid, displayName });
+  await batch.commit();
+}
+
+/**
+ * Google sign-in in a popup, for new and returning users. A new user gets a profile before this
+ * resolves (the caller holds `registering`, so the redirect waits for it). If the profile can't be
+ * written, the user is signed out again instead of being left half set up.
+ */
+export async function signInWithGoogle({ remember = true } = {}) {
+  await setPersistence(auth, remember ? indexedDBLocalPersistence : browserSessionPersistence);
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  const { user } = await signInWithPopup(auth, provider);
+  try {
+    await ensureProfile(user);
+  } catch (err) {
+    await signOut(auth);
+    throw err;
+  }
+  return user;
+}
+
+/** The user closed the Google popup: nothing to report. */
+export const isPopupDismissed = (error) =>
+  error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request';
+
 /**
  * Sends Firebase's reset link, in the UI language. After choosing a new password the user gets a
  * "Continue" button back to our sign-in page. With email enumeration protection on (the default),
@@ -76,6 +127,14 @@ export function authErrorMessage(error, t) {
       return t('Enter a valid email address.', 'أدخل بريدًا إلكترونيًا صحيحًا.');
     case 'auth/weak-password':
       return t('Password is too weak.', 'كلمة المرور ضعيفة.');
+    case 'auth/popup-blocked':
+      return t('The browser blocked the Google window. Allow pop-ups for this site and try again.', 'حظر المتصفح نافذة Google. اسمح بالنوافذ المنبثقة لهذا الموقع وحاول مجددًا.');
+    case 'auth/operation-not-allowed':
+      return t('Google sign-in isn\'t turned on for this app yet.', 'تسجيل الدخول عبر Google غير مفعّل لهذا التطبيق بعد.');
+    case 'auth/unauthorized-domain':
+      return t('Google sign-in isn\'t allowed on this address.', 'تسجيل الدخول عبر Google غير مسموح على هذا العنوان.');
+    case 'auth/account-exists-with-different-credential':
+      return t('This email already has an account. Sign in with your password.', 'هذا البريد مسجّل بالفعل. سجّل الدخول بكلمة المرور.');
     case 'auth/missing-email':
       return t('Email is required.', 'البريد الإلكتروني مطلوب.');
     case 'auth/too-many-requests':

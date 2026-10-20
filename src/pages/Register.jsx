@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react';
 import { AuthLayout, AuthAlert, authClasses } from '../components/AuthLayout.jsx';
 import { Button } from '../components/Button.jsx';
 import { TextField, PasswordField } from '../components/Field.jsx';
+import { GoogleSignIn } from '../components/GoogleSignIn.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -21,6 +22,8 @@ export default function Register() {
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const locked = saving || googleBusy;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -66,17 +69,18 @@ export default function Register() {
       )}
       <form className="flex flex-col gap-4" noValidate onSubmit={handleSubmit}>
         <TextField label={t('Full name', 'الاسم الكامل')} required autoComplete="name" placeholder={t('e.g. Sara Haddad', 'مثال: سارة حداد')}
-          value={name} onChange={(e) => setName(e.target.value)} error={errors.name} disabled={saving}
+          value={name} onChange={(e) => setName(e.target.value)} error={errors.name} disabled={locked}
           hint={t('Shown to teammates on tasks and projects.', 'يظهر لزملائك على المهام والمشاريع.')} />
         <TextField label={t('Email', 'البريد الإلكتروني')} type="email" dir="ltr" required autoComplete="email" placeholder="name@team.dev"
-          value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} disabled={saving} />
+          value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} disabled={locked} />
         <PasswordField label={t('Password', 'كلمة المرور')} required lang={lang} showStrength autoComplete="new-password"
-          value={password} onChange={setPassword} error={errors.password} disabled={saving}
+          value={password} onChange={setPassword} error={errors.password} disabled={locked}
           hint={t(`At least ${PASSWORD_MIN} characters. Mix letters, numbers and symbols.`, `${PASSWORD_MIN} أحرف على الأقل. امزج بين الحروف والأرقام والرموز.`)} />
-        <Button type="submit" size="lg" loading={saving} iconEnd={ArrowRight} mirrorIcon className="mt-2 w-full">
+        <Button type="submit" size="lg" loading={saving} disabled={googleBusy} iconEnd={ArrowRight} mirrorIcon className="mt-2 w-full">
           {saving ? t('Creating account…', 'جارٍ إنشاء الحساب…') : t('Create account', 'إنشاء الحساب')}
         </Button>
       </form>
+      <GoogleSignIn disabled={saving} onBusyChange={setGoogleBusy} onError={setFormError} />
       <p className={authClasses.switch}>
         {t('Already have an account?', 'لديك حساب بالفعل؟')} <Link to="/login" className={authClasses.link}>{t('Sign in', 'سجّل الدخول')}</Link>
       </p>

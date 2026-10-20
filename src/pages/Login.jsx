@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react';
 import { AuthLayout, AuthAlert, authClasses } from '../components/AuthLayout.jsx';
 import { Button } from '../components/Button.jsx';
 import { TextField, PasswordField, Checkbox } from '../components/Field.jsx';
+import { GoogleSignIn } from '../components/GoogleSignIn.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 import { loginUser, authErrorMessage } from '../services/users.js';
@@ -18,6 +19,8 @@ export default function Login() {
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const locked = saving || googleBusy;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -49,21 +52,24 @@ export default function Login() {
       {formError && <AuthAlert><span className="font-semibold">{formError}</span></AuthAlert>}
       <form className="flex flex-col gap-4" noValidate onSubmit={handleSubmit}>
         <TextField label={t('Email', 'البريد الإلكتروني')} type="email" dir="ltr" required autoComplete="email" placeholder="name@team.dev"
-          value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} disabled={saving} />
+          value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} disabled={locked} />
         <PasswordField label={t('Password', 'كلمة المرور')} required lang={lang}
-          value={password} onChange={setPassword} error={errors.password} disabled={saving} />
+          value={password} onChange={setPassword} error={errors.password} disabled={locked} />
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-          <Checkbox label={t('Remember me', 'تذكرني')} checked={remember} disabled={saving}
+          <Checkbox label={t('Remember me', 'تذكرني')} checked={remember} disabled={locked}
             onChange={(e) => setRemember(e.target.checked)} />
           {/* Carries the typed email over so it doesn't have to be entered twice. */}
           <Link to="/forgot-password" state={{ email }} className={`${authClasses.link} text-body-sm`}>
             {t('Forgot password?', 'نسيت كلمة المرور؟')}
           </Link>
         </div>
-        <Button type="submit" size="lg" loading={saving} iconEnd={ArrowRight} mirrorIcon className="mt-2 w-full">
+        <Button type="submit" size="lg" loading={saving} disabled={googleBusy} iconEnd={ArrowRight} mirrorIcon className="mt-2 w-full">
           {saving ? t('Signing in…', 'جارٍ تسجيل الدخول…') : t('Sign in', 'تسجيل الدخول')}
         </Button>
       </form>
+      {/* Uses the same "Remember me" choice as the password form. */}
+      <GoogleSignIn remember={remember} disabled={saving} onBusyChange={setGoogleBusy}
+        onError={(err) => setFormError(err ? authErrorMessage(err, t) : '')} />
       <p className={authClasses.switch}>
         {t('New to TaskFlow?', 'جديد على TaskFlow؟')} <Link to="/register" className={authClasses.link}>{t('Create an account', 'أنشئ حسابًا')}</Link>
       </p>
