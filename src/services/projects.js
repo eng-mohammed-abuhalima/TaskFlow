@@ -3,8 +3,8 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDoc,
   getDocs,
+  onSnapshot,
   query,
   serverTimestamp,
   updateDoc,
@@ -19,11 +19,16 @@ const BATCH_LIMIT = 500; // Firestore's max writes per batch
 const fromSnap = (snap) => ({ id: snap.id, ...snap.data() });
 const clean = ({ name, description }) => ({ name: name.trim(), description: description.trim() });
 
-export async function createProject(values, uid) {
+/**
+ * `members` mirrors `memberIds` with a display name per member, so members can see each other's
+ * names without reading each other's private user documents.
+ */
+export async function createProject(values, user) {
   const ref = await addDoc(projectsCol, {
     ...clean(values),
-    ownerId: uid,
-    memberIds: [uid],
+    ownerId: user.uid,
+    memberIds: [user.uid],
+    members: { [user.uid]: { displayName: user.displayName || user.email.split('@')[0] } },
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -36,10 +41,17 @@ export async function listMyProjects(uid) {
   return snap.docs.map(fromSnap).sort((a, b) => (b.updatedAt?.toMillis() ?? 0) - (a.updatedAt?.toMillis() ?? 0));
 }
 
-/** The project, or null when it doesn't exist. Throws permission-denied for non-members. */
-export async function getProject(id) {
-  const snap = await getDoc(doc(db, 'projects', id));
-  return snap.exists() ? fromSnap(snap) : null;
+/**
+ * Live project: onData(project) or onData(null) when it doesn't exist; onError(err) with
+ * code 'permission-denied' for non-members (or when a member is removed while watching).
+ * Returns the unsubscribe function.
+ */
+export function subscribeToProject(id, onData, onError) {
+  return onSnapshot(
+    doc(db, 'projects', id),
+    (snap) => onData(snap.exists() ? { id: snap.id, ...snap.data({ serverTimestamps: 'estimate' }) } : null),
+    onError
+  );
 }
 
 export function updateProject(id, values) {

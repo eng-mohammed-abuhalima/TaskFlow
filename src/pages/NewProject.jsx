@@ -14,7 +14,7 @@ export default function NewProject() {
 
   async function handleSubmit(values) {
     try {
-      const id = await createProject(values, user.uid);
+      const id = await createProject(values, user);
       showToast({ tone: 'success', title: t('Project created', 'تم إنشاء المشروع') });
       navigate(`/projects/${id}`);
     } catch {

@@ -4,7 +4,7 @@ import {
   signOut,
   updateProfile,
 } from 'firebase/auth';
-import { doc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase.js';
 
 export const normalizeEmail = (email) => email.trim().toLowerCase();
@@ -21,9 +21,19 @@ export async function registerUser({ name, email, password }) {
 
   const batch = writeBatch(db);
   batch.set(doc(db, 'users', user.uid), { displayName, email: emailLower, createdAt: serverTimestamp() });
-  batch.set(doc(db, 'userEmails', emailLower), { uid: user.uid });
+  // The lookup carries the name too, so an owner adding this person by email can show who they are
+  // without being able to read the private users/{uid} document.
+  batch.set(doc(db, 'userEmails', emailLower), { uid: user.uid, displayName });
   await batch.commit();
   return user;
+}
+
+/** Who owns this email? { uid, displayName } or null when no account uses it. */
+export async function findUserByEmail(email) {
+  const snap = await getDoc(doc(db, 'userEmails', normalizeEmail(email)));
+  if (!snap.exists()) return null;
+  const { uid, displayName } = snap.data();
+  return { uid, displayName: displayName || normalizeEmail(email).split('@')[0] };
 }
 
 export function loginUser({ email, password }) {
