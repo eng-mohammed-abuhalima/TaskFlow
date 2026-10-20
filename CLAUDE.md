@@ -90,5 +90,9 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 - Phase 3 done: projects CRUD (`services/projects.js`, `useProject` + `ProjectStatusView` for 404/403,
   `ToastContext` → `useToast()`, `ProjectForm`, `Breadcrumb`). Wrap user-entered text in the `user-text`
   utility (unicode-bidi: plaintext) instead of setting `dir`. Logout goes through `useAuth().logout`.
-- Next: tasks CRUD → firestore.rules + tests with a second account → deploy.
+- Phase 4 done: tasks CRUD (`services/tasks.js` live via onSnapshot, `useTasks`, `TaskFormModal`,
+  `lib/permissions.js` mirrors the task rules — keep them in sync). New tasks always start as `todo`.
+  `Modal` wraps content in `PortalScope` so Radix popups inside a `<dialog>` stay clickable.
+  Member-role task tests (creator / assignee) still pending until members exist (phase 5).
+- Next: membership (decide how members see each other's names first) → firestore.rules + tests with a second account → deploy.
 - Mohammed makes all commits himself: prepare the changes and give him the `git add` / `git commit` commands.
