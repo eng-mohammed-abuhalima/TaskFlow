@@ -111,5 +111,9 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
   write in services with it; `writeErrorMessage` for the text), `OfflineBanner`, `ErrorBoundary`, `usePageTitle` on every
   page, `AppLayout` owns `<main id="main">` + skip link + focus on navigation (pages render a `div`, never their own `main`).
   Stat cards are not headings. Verified across 3 sizes x 2 languages x 2 themes.
-- Next: phase 9 — deploy (Vercel or Firebase Hosting), SPA rewrites, authorized domain, demo data.
+- Phase 9 done: live at https://taskflow-be3db.web.app (Firebase Hosting; `firebase.json` `hosting` has the SPA
+  rewrite, cache and security headers). Redeploy with `npm run deploy` (needs `.env.local` to build). Demo data (SRS
+  Appendix A) is in Firestore: owner + member on "Website Redesign 2026", a second owner-only "Mobile App" project.
+- Next: phase 10 — README last (Mohammed's choice), screenshots (5+), demo/code-review prep. Never type passwords into
+  the live site; test login there by hand.
 - Mohammed makes all commits himself: prepare the changes and give him the `git add` / `git commit` commands.
