@@ -13,11 +13,13 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { useProject } from '../hooks/useProject.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useTasks } from '../hooks/useTasks.js';
 import { createTask, updateTask, deleteTask } from '../services/tasks.js';
 import { canEditTask, canDeleteTask, canChangeStatus } from '../lib/permissions.js';
 import { projectMembers } from '../lib/members.js';
 import { filterTasks, DEFAULT_FILTERS } from '../lib/filterTasks.js';
+import { writeErrorMessage } from '../lib/network.js';
 import { formatNumber, todayISO } from '../lib/i18n.js';
 import { MemberChip } from '../components/Avatar.jsx';
 
@@ -31,6 +33,7 @@ export default function ProjectDetails() {
 // Split out so the tasks subscription only starts once we know the user is a member.
 function ProjectView({ project, isOwner }) {
   const { t, lang } = usePrefs();
+  usePageTitle(project.name);
   const { user } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -47,12 +50,8 @@ function ProjectView({ project, isOwner }) {
   const setFilter = (change) => setFilters((f) => ({ ...f, ...change }));
   const clearFilters = () => setFilters(DEFAULT_FILTERS);
 
-  const saveFailed = () =>
-    showToast({
-      tone: 'error',
-      title: t('Couldn’t save the task', 'تعذّر حفظ المهمة'),
-      message: t('Check your connection and try again. Nothing was saved.', 'تحقق من الاتصال وحاول مجددًا. لم يُحفظ شيء.'),
-    });
+  const saveFailed = (err) =>
+    showToast({ tone: 'error', title: t('Couldn’t save the task', 'تعذّر حفظ المهمة'), message: writeErrorMessage(err, t) });
 
   async function handleSubmit(values) {
     try {
@@ -65,7 +64,7 @@ function ProjectView({ project, isOwner }) {
       }
       setForm({ open: false, task: form.task });
     } catch (err) {
-      saveFailed();
+      saveFailed(err);
       throw err; // keeps the dialog open with the values
     }
   }
@@ -76,15 +75,16 @@ function ProjectView({ project, isOwner }) {
       await deleteTask(project.id, toDelete.id);
       showToast({ tone: 'success', title: t('Task deleted', 'تم حذف المهمة') });
       setToDelete(null);
-    } catch {
-      showToast({ tone: 'error', title: t('Couldn’t delete the task', 'تعذّر حذف المهمة'), message: t('Check your connection and try again.', 'تحقق من الاتصال وحاول مجددًا.') });
+    } catch (err) {
+      // The dialog stays open: pressing "Delete task" again is the retry.
+      showToast({ tone: 'error', title: t('Couldn’t delete the task', 'تعذّر حذف المهمة'), message: writeErrorMessage(err, t, t('Check your connection and try again.', 'تحقق من الاتصال وحاول مجددًا.')) });
     } finally {
       setDeleting(false);
     }
   }
 
   return (
-    <main className="mx-auto flex max-w-page flex-col gap-6 px-4 py-6 md:px-6 md:py-8 lg:px-8">
+    <div className="mx-auto flex max-w-page flex-col gap-6 px-4 py-6 md:px-6 md:py-8 lg:px-8">
       <Breadcrumb items={[{ label: t('Dashboard', 'لوحة التحكم'), to: '/dashboard' }, { label: project.name }]} />
       <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0 max-w-2xl">
@@ -188,6 +188,6 @@ function ProjectView({ project, isOwner }) {
         {toDelete && t(`“${toDelete.title}” will be removed for every member. This can’t be undone.`,
           `ستُحذف «${toDelete.title}» لدى كل الأعضاء. لا يمكن التراجع عن ذلك.`)}
       </ConfirmDialog>
-    </main>
+    </div>
   );
 }

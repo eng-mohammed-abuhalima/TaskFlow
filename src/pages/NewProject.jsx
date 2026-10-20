@@ -3,11 +3,14 @@ import { Breadcrumb } from '../components/Breadcrumb.jsx';
 import { ProjectForm } from '../components/ProjectForm.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { usePrefs } from '../context/PreferencesContext.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useToast } from '../context/ToastContext.jsx';
 import { createProject } from '../services/projects.js';
+import { writeErrorMessage } from '../lib/network.js';
 
 export default function NewProject() {
   const { t } = usePrefs();
+  usePageTitle(t('New project', 'مشروع جديد'));
   const { user } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -17,17 +20,17 @@ export default function NewProject() {
       const id = await createProject(values, user);
       showToast({ tone: 'success', title: t('Project created', 'تم إنشاء المشروع') });
       navigate(`/projects/${id}`);
-    } catch {
+    } catch (err) {
       showToast({
         tone: 'error',
         title: t('Couldn’t create the project', 'تعذّر إنشاء المشروع'),
-        message: t('Check your connection and try again. Nothing was saved.', 'تحقق من الاتصال وحاول مجددًا. لم يُحفظ شيء.'),
+        message: writeErrorMessage(err, t),
       });
     }
   }
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
+    <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
       <Breadcrumb items={[{ label: t('Dashboard', 'لوحة التحكم'), to: '/dashboard' }, { label: t('New project', 'مشروع جديد') }]} />
       <div>
         <h1 className="font-display text-title font-semibold text-fg">{t('New project', 'مشروع جديد')}</h1>
@@ -43,6 +46,6 @@ export default function NewProject() {
           onCancel={() => navigate('/dashboard')}
         />
       </section>
-    </main>
+    </div>
   );
 }

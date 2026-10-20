@@ -84,7 +84,8 @@ export function StatCard({ label, value, icon, tone = 'neutral', hint, lang = 'e
   return (
     <section className={statCardClasses({ tone })} aria-label={label}>
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-label font-medium text-fg-muted">{label}</h3>
+        {/* Not a heading: the card is a labelled section, and an h3 here made the page jump from h1 to h3. */}
+        <p className="text-label font-medium text-fg-muted">{label}</p>
         {icon && (
           <span className={statIconClasses({ tone })}>
             <Icon icon={icon} size={20} />

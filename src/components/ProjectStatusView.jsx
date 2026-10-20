@@ -3,6 +3,7 @@ import { CloudOff } from 'lucide-react';
 import { Button } from './Button.jsx';
 import { EmptyState, Loading, Skeleton, StatePage } from './States.jsx';
 import { usePrefs } from '../context/PreferencesContext.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 /**
  * Renders the non-ready states of useProject(): loading, 404, 403 and network errors.
@@ -11,6 +12,11 @@ import { usePrefs } from '../context/PreferencesContext.jsx';
 export function ProjectStatusView({ status, onRetry, deniedMessage }) {
   const { t } = usePrefs();
   const navigate = useNavigate();
+  usePageTitle({
+    loading: t('Loading…', 'جارٍ التحميل…'),
+    notFound: t('Project not found', 'المشروع غير موجود'),
+    denied: t('No access', 'لا توجد صلاحية'),
+  }[status] ?? t('Couldn’t load the project', 'تعذّر تحميل المشروع'));
   const back = { actionLabel: t('Back to dashboard', 'العودة إلى لوحة التحكم'), onAction: () => navigate('/dashboard') };
 
   if (status === 'loading') {
@@ -37,11 +43,11 @@ export function ProjectStatusView({ status, onRetry, deniedMessage }) {
     );
   }
   return (
-    <main className="mx-auto max-w-page px-4 py-16">
+    <div className="mx-auto max-w-page px-4 py-16">
       <EmptyState icon={CloudOff} title={t('Couldn’t load this project', 'تعذّر تحميل هذا المشروع')}
         action={<Button variant="secondary" onClick={onRetry}>{t('Retry', 'إعادة المحاولة')}</Button>}>
         {t('Check your connection and try again.', 'تحقق من الاتصال وحاول مجددًا.')}
       </EmptyState>
-    </main>
+    </div>
   );
 }

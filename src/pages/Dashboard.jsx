@@ -6,6 +6,7 @@ import { EmptyState, Loading, Skeleton, SkeletonProjectCard } from '../component
 import { StatusBreakdown } from '../components/dashboard/StatusBreakdown.jsx';
 import { OverdueList } from '../components/dashboard/OverdueList.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 import { useDashboard } from '../hooks/useDashboard.js';
 import { formatDate, formatNumber, timestampToISO, todayISO } from '../lib/i18n.js';
@@ -14,6 +15,7 @@ import { projectProgress, summarizeDashboard } from '../lib/taskStats.js';
 
 export default function Dashboard() {
   const { t, lang } = usePrefs();
+  usePageTitle(t('Dashboard', 'لوحة التحكم'));
   const { user } = useAuth();
   const navigate = useNavigate();
   const { status, entries, reload } = useDashboard(user.uid);
@@ -25,7 +27,7 @@ export default function Dashboard() {
   );
 
   return (
-    <main className="mx-auto flex max-w-page flex-col gap-6 px-4 py-6 md:gap-8 md:px-6 md:py-8 lg:px-8">
+    <div className="mx-auto flex max-w-page flex-col gap-6 px-4 py-6 md:gap-8 md:px-6 md:py-8 lg:px-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-body-sm text-fg-muted">{formatDate(today, lang, { weekday: 'long', day: 'numeric', month: 'long' })}</p>
@@ -58,7 +60,7 @@ export default function Dashboard() {
       ) : (
         <DashboardContent entries={entries} today={today} t={t} lang={lang} />
       )}
-    </main>
+    </div>
   );
 }
 

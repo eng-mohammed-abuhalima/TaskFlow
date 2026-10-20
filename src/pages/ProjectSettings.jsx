@@ -9,9 +9,11 @@ import { FullPageLoading } from '../components/routing/FullPageLoading.jsx';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { useProject } from '../hooks/useProject.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 import { updateProject, deleteProject } from '../services/projects.js';
 import { addMemberByEmail, removeMember, MemberError, MAX_MEMBERS } from '../services/members.js';
 import { projectMembers } from '../lib/members.js';
+import { writeErrorMessage } from '../lib/network.js';
 import { validateEmail } from '../lib/validation.js';
 
 export default function ProjectSettings() {
@@ -20,6 +22,8 @@ export default function ProjectSettings() {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const { status, project, isOwner, reload } = useProject(id);
+  // Only for the owner's page; the loading / 403 / 404 views set their own title.
+  usePageTitle(status === 'ready' && isOwner ? `${t('Settings', 'الإعدادات')} · ${project.name}` : null);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [email, setEmail] = useState('');
@@ -43,16 +47,15 @@ export default function ProjectSettings() {
   const owner = everyone.find((m) => m.uid === project.ownerId);
   const others = everyone.filter((m) => m.uid !== project.ownerId);
 
-  const connectionToast = (title) =>
-    showToast({ tone: 'error', title, message: t('Check your connection and try again. Nothing was saved.', 'تحقق من الاتصال وحاول مجددًا. لم يُحفظ شيء.') });
+  const failureToast = (title, err) => showToast({ tone: 'error', title, message: writeErrorMessage(err, t) });
 
   async function handleSave(values) {
     try {
       await updateProject(id, values);
       showToast({ tone: 'success', title: t('Project updated', 'تم تحديث المشروع') });
       navigate(`/projects/${id}`);
-    } catch {
-      connectionToast(t('Couldn’t save your changes', 'تعذّر حفظ التغييرات'));
+    } catch (err) {
+      failureToast(t('Couldn’t save your changes', 'تعذّر حفظ التغييرات'), err);
     }
   }
 
@@ -71,7 +74,9 @@ export default function ProjectSettings() {
         duplicate: t('This person is already a member.', 'هذا الشخص عضو بالفعل.'),
         full: t(`A project can have up to ${MAX_MEMBERS} members.`, `يمكن أن يضم المشروع حتى ${MAX_MEMBERS} عضوًا.`),
       };
-      setEmailError(err instanceof MemberError ? messages[err.code] : t('Couldn’t add the member. Check your connection and try again.', 'تعذّرت إضافة العضو. تحقق من الاتصال وحاول مجددًا.'));
+      setEmailError(err instanceof MemberError
+        ? messages[err.code]
+        : writeErrorMessage(err, t, t('Couldn’t add the member. Check your connection and try again.', 'تعذّرت إضافة العضو. تحقق من الاتصال وحاول مجددًا.')));
     } finally {
       setAdding(false);
     }
@@ -83,8 +88,8 @@ export default function ProjectSettings() {
       await removeMember(project, toRemove.uid);
       showToast({ tone: 'success', title: t('Member removed', 'تمت إزالة العضو'), message: toRemove.name });
       setToRemove(null);
-    } catch {
-      connectionToast(t('Couldn’t remove the member', 'تعذّرت إزالة العضو'));
+    } catch (err) {
+      failureToast(t('Couldn’t remove the member', 'تعذّرت إزالة العضو'), err);
     } finally {
       setRemoving(false);
     }
@@ -96,19 +101,15 @@ export default function ProjectSettings() {
       await deleteProject(id);
       showToast({ tone: 'success', title: t('Project deleted', 'تم حذف المشروع'), message: project.name });
       navigate('/dashboard', { replace: true });
-    } catch {
+    } catch (err) {
+      // The dialog stays open: pressing "Delete project" again is the retry.
       setDeleting(false);
-      setConfirming(false);
-      showToast({
-        tone: 'error',
-        title: t('Couldn’t delete the project', 'تعذّر حذف المشروع'),
-        message: t('Check your connection and try again.', 'تحقق من الاتصال وحاول مجددًا.'),
-      });
+      failureToast(t('Couldn’t delete the project', 'تعذّر حذف المشروع'), err);
     }
   }
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
+    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
       <Breadcrumb items={[
         { label: t('Dashboard', 'لوحة التحكم'), to: '/dashboard' },
         { label: project.name, to: `/projects/${id}` },
@@ -167,6 +168,6 @@ export default function ProjectSettings() {
         {t(`“${project.name}” and all of its tasks will be removed for every member. This can’t be undone.`,
           `سيُحذف «${project.name}» وجميع مهامه لدى كل الأعضاء. لا يمكن التراجع عن ذلك.`)}
       </ConfirmDialog>
-    </main>
+    </div>
   );
 }

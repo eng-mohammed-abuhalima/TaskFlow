@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react';
 import { AuthLayout, AuthAlert, authClasses } from '../components/AuthLayout.jsx';
 import { Button } from '../components/Button.jsx';
 import { TextField, PasswordField } from '../components/Field.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { registerUser, authErrorMessage } from '../services/users.js';
@@ -11,6 +12,7 @@ import { validateName, validateEmail, validatePassword, compact, PASSWORD_MIN } 
 
 export default function Register() {
   const { t, lang } = usePrefs();
+  usePageTitle(t('Create account', 'إنشاء حساب'));
   const { setRegistering, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState('');

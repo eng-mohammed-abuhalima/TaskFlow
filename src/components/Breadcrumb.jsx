@@ -17,7 +17,7 @@ export function Breadcrumb({ items }) {
               {last || !item.to ? (
                 <span aria-current={last ? 'page' : undefined} className="user-text truncate font-medium text-fg">{item.label}</span>
               ) : (
-                <Link to={item.to} className="user-text truncate rounded-tight hover:text-fg focus-ring">{item.label}</Link>
+                <Link to={item.to} className="user-text truncate rounded-tight py-0.5 hover:text-fg focus-ring">{item.label}</Link>
               )}
             </li>
           );

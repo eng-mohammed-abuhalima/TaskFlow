@@ -4,12 +4,14 @@ import { ArrowRight } from 'lucide-react';
 import { AuthLayout, AuthAlert, authClasses } from '../components/AuthLayout.jsx';
 import { Button } from '../components/Button.jsx';
 import { TextField, PasswordField } from '../components/Field.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 import { loginUser, authErrorMessage } from '../services/users.js';
 import { validateEmail, validatePassword, compact } from '../lib/validation.js';
 
 export default function Login() {
   const { t, lang } = usePrefs();
+  usePageTitle(t('Sign in', 'تسجيل الدخول'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
