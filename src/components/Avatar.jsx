@@ -50,7 +50,7 @@ export function AvatarStack({ names = [], max = 4, size = 'sm', label }) {
   const extra = names.length - shown.length;
   return (
     <span className="inline-flex items-center [&>*+*]:-ms-1" role="img" aria-label={label || names.join(', ')}>
-      {shown.map((n) => <Avatar key={n} name={n} size={size} className={avatarStackRing} />)}
+      {shown.map((n, i) => <Avatar key={i} name={n} size={size} className={avatarStackRing} />)}
       {extra > 0 && (
         <span className={avatarClasses({ size, tone: 'ink', className: 'tabular-nums ' + avatarStackRing })} aria-hidden="true">+{extra}</span>
       )}
@@ -62,7 +62,7 @@ export function MemberChip({ name, owner, ownerLabel = 'Owner', onRemove, remove
   return (
     <span className={cx(memberChipClasses, onRemove && 'pe-1', className)}>
       <Avatar name={name} size="sm" />
-      <span className="truncate">{name}</span>
+      <span className="user-text truncate">{name}</span>
       {owner && (
         <span className="inline-flex items-center gap-1 text-caption font-medium text-fg-accent">
           <Icon icon={Crown} size={14} />

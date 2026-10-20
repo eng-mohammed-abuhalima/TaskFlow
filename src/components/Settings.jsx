@@ -30,6 +30,7 @@ export function Panel({ title, description, tone, children, className }) {
   );
 }
 
+/** `members`: [{ uid, name }] without the owner; onRemove receives that member object. */
 export function MembersManager({ lang = 'en', owner, members = [], email = '', error, adding, onEmail, onAdd, onRemove }) {
   const t = (en, ar) => (lang === 'ar' ? ar : en);
   return (
@@ -42,7 +43,7 @@ export function MembersManager({ lang = 'en', owner, members = [], email = '', e
       <ul className="flex flex-wrap gap-2" aria-label={t('Current members', 'الأعضاء الحاليون')}>
         <li><MemberChip name={owner} owner ownerLabel={t('Owner', 'المالك')} /></li>
         {members.map((m) => (
-          <li key={m}><MemberChip name={m} onRemove={() => onRemove && onRemove(m)} removeLabel={t('Remove ' + m, 'إزالة ' + m)} /></li>
+          <li key={m.uid}><MemberChip name={m.name} onRemove={() => onRemove && onRemove(m)} removeLabel={t('Remove ' + m.name, 'إزالة ' + m.name)} /></li>
         ))}
       </ul>
     </Panel>

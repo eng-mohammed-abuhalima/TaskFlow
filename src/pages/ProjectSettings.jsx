@@ -3,12 +3,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Breadcrumb } from '../components/Breadcrumb.jsx';
 import { ProjectForm } from '../components/ProjectForm.jsx';
 import { ProjectStatusView } from '../components/ProjectStatusView.jsx';
-import { Panel, DangerZone } from '../components/Settings.jsx';
+import { Panel, MembersManager, DangerZone } from '../components/Settings.jsx';
 import { ConfirmDialog } from '../components/Overlay.jsx';
+import { FullPageLoading } from '../components/routing/FullPageLoading.jsx';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { useProject } from '../hooks/useProject.js';
 import { updateProject, deleteProject } from '../services/projects.js';
+import { addMemberByEmail, removeMember, MemberError, MAX_MEMBERS } from '../services/members.js';
+import { projectMembers } from '../lib/members.js';
+import { validateEmail } from '../lib/validation.js';
 
 export default function ProjectSettings() {
   const { id } = useParams();
@@ -18,9 +22,16 @@ export default function ProjectSettings() {
   const { status, project, isOwner, reload } = useProject(id);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [toRemove, setToRemove] = useState(null);
+  const [removing, setRemoving] = useState(false);
 
-  // Members can read the project but settings are owner-only (the rules enforce it too).
+  // The project doc disappears the moment our own delete lands; don't flash a 404 before we leave.
+  if (deleting && status !== 'ready') return <FullPageLoading />;
   if (status !== 'ready') return <ProjectStatusView status={status} onRetry={reload} />;
+  // Members can read the project but settings are owner-only (the rules enforce it too).
   if (!isOwner) {
     return (
       <ProjectStatusView status="denied"
@@ -28,12 +39,12 @@ export default function ProjectSettings() {
     );
   }
 
-  const saveFailed = () =>
-    showToast({
-      tone: 'error',
-      title: t('Couldn’t save your changes', 'تعذّر حفظ التغييرات'),
-      message: t('Check your connection and try again. Nothing was saved.', 'تحقق من الاتصال وحاول مجددًا. لم يُحفظ شيء.'),
-    });
+  const everyone = projectMembers(project, t('Member', 'عضو'));
+  const owner = everyone.find((m) => m.uid === project.ownerId);
+  const others = everyone.filter((m) => m.uid !== project.ownerId);
+
+  const connectionToast = (title) =>
+    showToast({ tone: 'error', title, message: t('Check your connection and try again. Nothing was saved.', 'تحقق من الاتصال وحاول مجددًا. لم يُحفظ شيء.') });
 
   async function handleSave(values) {
     try {
@@ -41,7 +52,41 @@ export default function ProjectSettings() {
       showToast({ tone: 'success', title: t('Project updated', 'تم تحديث المشروع') });
       navigate(`/projects/${id}`);
     } catch {
-      saveFailed();
+      connectionToast(t('Couldn’t save your changes', 'تعذّر حفظ التغييرات'));
+    }
+  }
+
+  async function handleAdd() {
+    const invalid = validateEmail(email, t);
+    setEmailError(invalid || '');
+    if (invalid) return;
+    setAdding(true);
+    try {
+      const added = await addMemberByEmail(project, email);
+      setEmail('');
+      showToast({ tone: 'success', title: t('Member added', 'تمت إضافة العضو'), message: added.displayName });
+    } catch (err) {
+      const messages = {
+        'not-found': t('No account uses this email.', 'لا يوجد حساب بهذا البريد الإلكتروني.'),
+        duplicate: t('This person is already a member.', 'هذا الشخص عضو بالفعل.'),
+        full: t(`A project can have up to ${MAX_MEMBERS} members.`, `يمكن أن يضم المشروع حتى ${MAX_MEMBERS} عضوًا.`),
+      };
+      setEmailError(err instanceof MemberError ? messages[err.code] : t('Couldn’t add the member. Check your connection and try again.', 'تعذّرت إضافة العضو. تحقق من الاتصال وحاول مجددًا.'));
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function handleRemove() {
+    setRemoving(true);
+    try {
+      await removeMember(project, toRemove.uid);
+      showToast({ tone: 'success', title: t('Member removed', 'تمت إزالة العضو'), message: toRemove.name });
+      setToRemove(null);
+    } catch {
+      connectionToast(t('Couldn’t remove the member', 'تعذّرت إزالة العضو'));
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -81,9 +126,33 @@ export default function ProjectSettings() {
         />
       </Panel>
 
-      {/* Members management arrives in phase 5. */}
+      <MembersManager
+        lang={lang}
+        owner={owner.name}
+        members={others}
+        email={email}
+        error={emailError}
+        adding={adding}
+        onEmail={(value) => { setEmail(value); setEmailError(''); }}
+        onAdd={handleAdd}
+        onRemove={setToRemove}
+      />
 
       <DangerZone lang={lang} projectName={project.name} onDelete={() => setConfirming(true)} />
+
+      <ConfirmDialog
+        open={Boolean(toRemove)}
+        title={toRemove ? t(`Remove ${toRemove.name}?`, `إزالة ${toRemove.name}؟`) : ''}
+        confirmLabel={removing ? t('Removing…', 'جارٍ الإزالة…') : t('Remove member', 'إزالة العضو')}
+        cancelLabel={t('Cancel', 'إلغاء')}
+        closeLabel={t('Close', 'إغلاق')}
+        loading={removing}
+        onConfirm={handleRemove}
+        onCancel={() => !removing && setToRemove(null)}
+      >
+        {t('They will lose access to this project right away, and the tasks assigned to them will become unassigned.',
+          'سيفقد وصوله إلى هذا المشروع فورًا، وستصبح المهام المُسندة إليه غير مُسندة.')}
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={confirming}
