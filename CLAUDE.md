@@ -60,7 +60,8 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 ## Permissions (enforce in firestore.rules, not just UI)
 
 - Owner: everything in the project.
-- Member: read project + tasks; create tasks (createdBy = self); edit tasks they created or are assigned to;
+- Member: read project + tasks; create tasks (createdBy = self); edit tasks they created (on tasks they are ONLY
+  assigned to: status update or unassigning themselves, nothing else; stricter than the SRS, Mohammed's choice);
   delete only tasks they created; change status only on tasks assigned to them.
 - Only the owner edits/deletes the project and manages members. Removing a member revokes access and
   unassigns their tasks. Deleting a project must delete its tasks subcollection (Firestore won't) or be blocked.
@@ -104,7 +105,7 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 - Phase 6 done: `lib/filterTasks.js` (pure, AND-combined filters incl. overdue) + `FilterBar` on the project page;
   real dashboard (`useDashboard` loads projects + their tasks, `lib/taskStats.js` aggregates client-side,
   `components/dashboard/{StatusBreakdown,OverdueList}`). FilterBar members are `[{ uid, name }]`.
-- Phase 7 done: hardened rules + emulator tests (203 after the activity log; 14 mutations) (`npm run test:rules`, needs Java 21+; `tests/rules.test.js`), a
+- Phase 7 done: hardened rules + emulator tests (224 after the assignee limit; 17 mutations) (`npm run test:rules`, needs Java 21+; `tests/rules.test.js`), a
   mutation check that proves the tests catch broken rules (`npm run test:rules:mutations`), `docs/SECURITY.md`.
   Rule names written into `projects.members` must equal the user's own `users/{uid}.displayName`.
 - Phase 8 done: offline = refuse to save with a clear error (`lib/network.js` `guardedWrite`, wrap every Firestore
@@ -127,6 +128,12 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
   Navbar) + decline with reason (task: unassign + tell the assigner; project: leave + tell the owner). Every entry
   and notification goes in the SAME writeBatch as its change; rules check it with get/getAfter. Services take
   `(project, …, uid)`: createTask/updateTask/deleteTask, addMemberByEmail, removeMember, updateProject.
+  Status updates: the status pill in each task row is a button for the ASSIGNEE only, opening `StatusDialog` (status,
+  optional message ≤300, who to notify). The owner changes status from the edit form (Status field, assignee told
+  automatically, no message). The edit form only opens for owner/creator. A non-owner
+  MUST notify the owner (task stores `statusNoteId`, rules check it with existsAfter). `task_done` notes are replaced
+  by `task_status`. Notes have `status`/`message` keys, log entries a `message` key: deploy rules and hosting together
+  (`npm run deploy:all`), older app builds can't write the new shape.
 - Next: phase 10 (delivery). Order: (1) demo script + code-review Q&A prep (explain the Overdue filter:
   `dueDate < today && status !== 'done'`, today = `todayISO()` in Asia/Hebron), (2) 5-8 screenshots in
   `docs/screenshots/` taken by Mohammed in his own browser from the live URL, (3) README LAST (Mohammed's choice):
