@@ -21,6 +21,14 @@ service cloud.firestore {
       return reason is string && reason.trim().size() >= 3 && reason.size() <= 300;
     }
 
+    // What the owner can grant a member, on ANY task of the project (on their own tasks the creator
+    // already edits, re-dates, reassigns and deletes; on tasks assigned to them anyone updates the status).
+    function validPerms(perms) {
+      return perms is list && perms.size() <= 6
+        && perms.hasOnly(['create', 'edit', 'dueDate', 'assign', 'status', 'delete'])
+        && perms.toSet().size() == perms.size();
+    }
+
     // Optional note sent with a status update.
     function validMessage(message) {
       return message == null || (message is string && message.trim().size() >= 1 && message.size() <= 300);
@@ -67,6 +75,10 @@ service cloud.firestore {
           return ['type', 'projectId', 'projectName', 'taskId', 'taskTitle', 'actorId', 'actorName',
             'reason', 'dueDate', 'sourceId', 'status', 'message', 'at', 'read', 'response'];
         }
+        // Optional: the permissions given (added to a project / permissions changed).
+        function allNoteKeys() {
+          return noteKeys().concat(['perms']);
+        }
         function hasTask() {
           return note().taskId is string && note().taskId.size() <= 64;
         }
@@ -96,7 +108,10 @@ service cloud.firestore {
             || (type == 'member_added' && request.auth.uid == projectBefore().ownerId
                 && !(uid in projectBefore().memberIds) && uid in projectAfter().memberIds)
             || (type == 'member_left' && uid == projectBefore().ownerId && validReason(note().reason)
-                && !(request.auth.uid in projectAfter().memberIds));
+                && !(request.auth.uid in projectAfter().memberIds))
+            || (type == 'perms_changed' && request.auth.uid == projectBefore().ownerId
+                && uid in projectBefore().memberIds && validPerms(note().perms)
+                && getAfter(/databases/$(database)/documents/projects/$(note().projectId)/memberPerms/$(uid)).data.perms == note().perms);
         }
 
         allow read: if isSelf(uid);
@@ -112,8 +127,9 @@ service cloud.firestore {
 
         allow create: if signedIn()
           && uid != request.auth.uid
-          && note().keys().hasOnly(noteKeys())
+          && note().keys().hasOnly(allNoteKeys())
           && note().keys().hasAll(noteKeys())
+          && (!('perms' in note()) || (validPerms(note().perms) && note().type in ['member_added', 'perms_changed']))
           && note().projectId is string
           && request.auth.uid in projectBefore().memberIds
           && note().actorId == request.auth.uid
@@ -275,6 +291,13 @@ service cloud.firestore {
           return ['type', 'actorId', 'actorName', 'taskId', 'taskTitle', 'targetId', 'targetName',
             'from', 'to', 'fields', 'reason', 'message', 'at'];
         }
+        // Optional: the permissions given (member added / permissions changed).
+        function allEntryKeys() {
+          return entryKeys().concat(['perms']);
+        }
+        function permsPathOf(uid) {
+          return /databases/$(database)/documents/projects/$(projectId)/memberPerms/$(uid);
+        }
         function hasTask() {
           return entry().taskId is string && entry().taskId.size() <= 64;
         }
@@ -311,7 +334,10 @@ service cloud.firestore {
                 && entry().targetId in before().memberIds && !(entry().targetId in after().memberIds))
             || (type == 'member_left' && !ownerActs() && validReason(entry().reason)
                 && !(request.auth.uid in after().memberIds))
-            || (type == 'project_updated' && ownerActs() && hasFields());
+            || (type == 'project_updated' && ownerActs() && hasFields())
+            || (type == 'member_perms' && ownerActs() && entry().targetId is string
+                && entry().targetId in before().memberIds && validPerms(entry().perms)
+                && getAfter(permsPathOf(entry().targetId)).data.perms == entry().perms);
         }
 
         allow read: if signedIn() && ownerActs();
@@ -320,8 +346,9 @@ service cloud.firestore {
 
         allow create: if signedIn()
           && request.auth.uid in before().memberIds
-          && entry().keys().hasOnly(entryKeys())
+          && entry().keys().hasOnly(allEntryKeys())
           && entry().keys().hasAll(entryKeys())
+          && (!('perms' in entry()) || (validPerms(entry().perms) && entry().type in ['member_added', 'member_perms']))
           && entry().actorId == request.auth.uid
           && entry().actorName == before().members[request.auth.uid].displayName
           && (entry().taskId == null || hasTask())
@@ -336,6 +363,36 @@ service cloud.firestore {
           && (entry().message == null || entry().type == 'task_status')
           && entry().at == request.time
           && matchesChange();
+      }
+
+      // Per-member permissions, one document per member (the rules can't loop over a map, but they can
+      // check one document). Only the owner writes them, for a member who is (or becomes, in the same
+      // batch) part of the project, never for the owner. The member reads their own; the owner reads all.
+      match /memberPerms/{memberId} {
+        function before() {
+          return get(/databases/$(database)/documents/projects/$(projectId)).data;
+        }
+        function after() {
+          return getAfter(/databases/$(database)/documents/projects/$(projectId)).data;
+        }
+        function ownerActs() {
+          return request.auth.uid == before().ownerId;
+        }
+
+        allow get: if signedIn()
+          && (ownerActs() || (memberId == request.auth.uid && request.auth.uid in before().memberIds));
+        allow list: if signedIn() && ownerActs();
+
+        allow create, update: if signedIn() && ownerActs()
+          && memberId != before().ownerId
+          && memberId in after().memberIds
+          && request.resource.data.keys().hasOnly(['perms', 'updatedAt'])
+          && request.resource.data.keys().hasAll(['perms', 'updatedAt'])
+          && validPerms(request.resource.data.perms)
+          && request.resource.data.updatedAt == request.time;
+
+        // Removing a member, deleting the project.
+        allow delete: if signedIn() && ownerActs();
       }
 
       // Tasks. Keep in sync with src/lib/permissions.js.
@@ -367,9 +424,26 @@ service cloud.firestore {
         function taskKeys() {
           return requiredTaskKeys().concat(['statusNoteId']);
         }
-        function assigneeOnlyChange() {
-          return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'statusNoteId', 'updatedAt', 'assigneeId'])
-            && (request.resource.data.assigneeId == resource.data.assigneeId || request.resource.data.assigneeId == null);
+        // The member's permissions (projects/{id}/memberPerms/{uid}). No document = "contributor": they may
+        // create tasks, and as the creator they manage those tasks (exactly the SRS member).
+        function permsPath() {
+          return /databases/$(database)/documents/projects/$(projectId)/memberPerms/$(request.auth.uid);
+        }
+        function can(perm) {
+          return inProject() && perm in (exists(permsPath()) ? get(permsPath()).data.perms : ['create']);
+        }
+        function changed() {
+          return request.resource.data.diff(resource.data).affectedKeys();
+        }
+        function isCreator() {
+          return resource.data.createdBy == request.auth.uid;
+        }
+        function isAssignee() {
+          return resource.data.assigneeId == request.auth.uid;
+        }
+        // Owner and creator may change these; anyone else needs the permission.
+        function mayChange(fields, perm) {
+          return !changed().hasAny(fields) || ownsProject() || isCreator() || can(perm);
         }
         // When anyone but the owner changes the status, the owner must be notified in the same batch:
         // the task names a NEW notification id, and that notification must exist afterwards in the
@@ -387,8 +461,9 @@ service cloud.firestore {
 
         allow read: if inProject();
 
-        // Any member; always starts as "todo" and is credited to its creator.
+        // The owner, or a member allowed to create tasks; always starts as "todo", credited to its creator.
         allow create: if inProject()
+          && (ownsProject() || can('create'))
           && request.resource.data.keys().hasOnly(taskKeys())
           && request.resource.data.keys().hasAll(requiredTaskKeys())
           && validTask(request.resource.data)
@@ -398,25 +473,25 @@ service cloud.firestore {
           && request.resource.data.createdAt == request.time
           && request.resource.data.updatedAt == request.time;
 
-        // Owner, creator or assignee. Status: owner or current assignee only.
-        // createdBy / createdAt never change.
+        // Each kind of change has its own check (createdBy / createdAt never change):
+        //  - title, description, priority: owner, creator, or "edit"
+        //  - due date: owner, creator, or "dueDate"
+        //  - assignee: owner, creator, or "assign"; the assignee may only take themselves off
+        //  - status: owner, the CURRENT assignee, or "status" (plus the owner's notification, below)
         allow update: if inProject()
-          && (ownsProject() || resource.data.createdBy == request.auth.uid || resource.data.assigneeId == request.auth.uid)
           && request.resource.data.keys().hasOnly(taskKeys())
           && validTask(request.resource.data)
           && request.resource.data.createdBy == resource.data.createdBy
           && request.resource.data.createdAt == resource.data.createdAt
           && request.resource.data.updatedAt == request.time
-          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])
-              || ownsProject() || resource.data.assigneeId == request.auth.uid)
-          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])
-              || ownsProject() || ownerNotified())
-          // Someone who is only the assignee (neither owner nor creator) can update the status, or take
-          // themselves off the task (declining, leaving), and nothing else.
-          && (ownsProject() || resource.data.createdBy == request.auth.uid || assigneeOnlyChange());
+          && mayChange(['title', 'description', 'priority'], 'edit')
+          && mayChange(['dueDate'], 'dueDate')
+          && (mayChange(['assigneeId'], 'assign') || (isAssignee() && request.resource.data.assigneeId == null))
+          && (!changed().hasAny(['status']) || ownsProject() || isAssignee() || can('status'))
+          && (!changed().hasAny(['status']) || ownsProject() || ownerNotified());
 
-        // Owner or creator.
-        allow delete: if ownsProject() || (inProject() && resource.data.createdBy == request.auth.uid);
+        // Owner, creator, or a member allowed to delete tasks.
+        allow delete: if ownsProject() || (inProject() && isCreator()) || can('delete');
       }
     }
 

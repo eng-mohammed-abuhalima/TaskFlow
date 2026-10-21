@@ -12,12 +12,12 @@ const original = readFileSync(join(ROOT, 'firestore.rules'), 'utf8');
 
 const mutations = [
   ['a member can edit the project', 'allow update: if signedIn() && isOwner()', 'allow update: if signedIn()'],
-  ['anyone can change a task status', '|| ownsProject() || resource.data.assigneeId == request.auth.uid)\n', '|| true)\n'],
+  ['anyone can change a task status', "&& (!changed().hasAny(['status']) || ownsProject() || isAssignee() || can('status'))", '&& true'],
   ['emails can be listed', 'allow list: if false;', 'allow list: if signedIn();'],
   ['member names can be forged', '&& entry.displayName == get(/databases/$(database)/documents/users/$(uid)).data.displayName;', '&& true;'],
   ['any month is accepted in due dates', '(0[1-9]|1[0-2])', '[0-9]{2}'],
   ['task createdBy can be changed', '&& request.resource.data.createdBy == resource.data.createdBy', '&& true'],
-  ['a member can delete any task', 'allow delete: if ownsProject() || (inProject() && resource.data.createdBy == request.auth.uid);', 'allow delete: if inProject();'],
+  ['a member can delete any task', "allow delete: if ownsProject() || (inProject() && isCreator()) || can('delete');", 'allow delete: if inProject();'],
   ['an outsider can read tasks', 'allow read: if inProject();', 'allow read: if signedIn();'],
   ['an unverified email can take over a lookup', '|| (request.auth.token.email_verified == true', '|| (true'],
   ['a member can read the activity log', 'allow read: if signedIn() && ownerActs();', 'allow read: if signedIn();'],
@@ -26,7 +26,10 @@ const mutations = [
   ['a decline can be sent to anyone', '\n                && answersAssignment())', ')'],
   ['a status change need not tell the owner', '|| ownsProject() || ownerNotified());', '|| true);'],
   ['a status update can go to someone outside the project', "(type == 'task_status' && hasTask() && uid in projectBefore().memberIds", "(type == 'task_status' && hasTask()"],
-  ['an assignee can edit the whole task', '|| resource.data.createdBy == request.auth.uid || assigneeOnlyChange());', '|| true);'],
+  ['anyone can edit task details', "&& mayChange(['title', 'description', 'priority'], 'edit')", ''],
+  ['due dates ignore permissions', "&& mayChange(['dueDate'], 'dueDate')", ''],
+  ['creating tasks ignores permissions', "&& (ownsProject() || can('create'))", ''],
+  ['a member can grant themselves permissions', 'allow create, update: if signedIn() && ownerActs()', 'allow create, update: if signedIn()'],
   ['"leaving" can remove other members', 'request.resource.data.memberIds == resource.data.memberIds.removeAll([request.auth.uid])', 'true'],
 ];
 

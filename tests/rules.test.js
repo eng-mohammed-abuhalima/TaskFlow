@@ -611,6 +611,117 @@ describe('status updates must tell the owner', () => {
     updateDoc(taskRef(as('owner'), 'assignedToMember'), { status: 'done', updatedAt: ts() }));
 });
 
+// Per-member permissions: projects/{id}/memberPerms/{uid} = { perms, updatedAt }. No document = contributor.
+const permsRef = (db, uid, pid = P) => doc(db, 'projects', pid, 'memberPerms', uid);
+const grant = (uid, perms) => seedDoc(['projects', P, 'memberPerms', uid], { perms, updatedAt: Timestamp.now() });
+const ALL_PERMS = ['create', 'edit', 'dueDate', 'assign', 'status', 'delete'];
+
+describe('member permissions (who sets them)', () => {
+  allows('the owner giving a member permissions', () => setDoc(permsRef(as('owner'), 'member'), { perms: ['edit', 'dueDate'], updatedAt: ts() }));
+  allows('the owner giving a member every permission', () => setDoc(permsRef(as('owner'), 'member'), { perms: ALL_PERMS, updatedAt: ts() }));
+  allows('the owner making a member a viewer (no permissions)', () => setDoc(permsRef(as('owner'), 'member'), { perms: [], updatedAt: ts() }));
+  denies('a member giving themselves permissions', () => setDoc(permsRef(as('member'), 'member'), { perms: ALL_PERMS, updatedAt: ts() }));
+  denies('permissions for the owner', () => setDoc(permsRef(as('owner'), 'owner'), { perms: [], updatedAt: ts() }));
+  denies('permissions for someone outside the project', () => setDoc(permsRef(as('owner'), 'outsider'), { perms: ['edit'], updatedAt: ts() }));
+  denies('an unknown permission', () => setDoc(permsRef(as('owner'), 'member'), { perms: ['admin'], updatedAt: ts() }));
+  denies('the same permission twice', () => setDoc(permsRef(as('owner'), 'member'), { perms: ['edit', 'edit'], updatedAt: ts() }));
+  denies('an extra field', () => setDoc(permsRef(as('owner'), 'member'), { perms: [], role: 'admin', updatedAt: ts() }));
+  allows('adding a member with permissions in one batch', () => inBatch('owner', (b, db) => {
+    b.update(projRef(db), { memberIds: arrayUnion('extra'), 'members.extra': { displayName: NAMES.extra }, updatedAt: ts() });
+    b.set(permsRef(db, 'extra'), { perms: ['create', 'status'], updatedAt: ts() });
+  }));
+  it('allows: a member reading their own; denies: reading someone else\'s or listing them', async () => {
+    await grant('member', ['edit']);
+    await seedDoc(['projects', P, 'memberPerms', 'other'], { perms: [], updatedAt: Timestamp.now() });
+    await assertSucceeds(getDoc(permsRef(as('member'), 'member')));
+    await assertFails(getDoc(permsRef(as('member'), 'other')));
+    await assertFails(getDocs(collection(as('member'), 'projects', P, 'memberPerms')));
+    await assertSucceeds(getDocs(collection(as('owner'), 'projects', P, 'memberPerms')));
+    await assertFails(getDoc(permsRef(as('outsider'), 'member')));
+  });
+  it('allows: the owner deleting them; denies: a member deleting their own', async () => {
+    await grant('member', ['edit']);
+    await assertFails(deleteDoc(permsRef(as('member'), 'member')));
+    await assertSucceeds(deleteDoc(permsRef(as('owner'), 'member')));
+  });
+});
+
+describe('member permissions (what they allow on tasks)', () => {
+  const upd = (id, data) => updateDoc(taskRef(as('member'), id), { ...data, updatedAt: ts() });
+
+  it('denies: a viewer creating a task; allows: the same member once given "create"', async () => {
+    await grant('member', []);
+    await assertFails(addDoc(tasksCol(as('member')), newTask({ createdBy: 'member' })));
+    await grant('member', ['create']);
+    await assertSucceeds(addDoc(tasksCol(as('member')), newTask({ createdBy: 'member' })));
+  });
+  it('allows: a viewer still managing a task they created earlier, and updating a task assigned to them', async () => {
+    await grant('member', []);
+    await assertSucceeds(upd('byMember', { title: 'Still mine' }));
+    await assertSucceeds(statusUpdate('member', 'assignedToMember', 'in_progress'));
+  });
+  it('"edit": details of any task, but not its due date, assignee or status', async () => {
+    await grant('member', ['edit']);
+    await assertSucceeds(upd('byOwner', { title: 'Edited with permission', priority: 'high' }));
+    await assertFails(upd('byOwner', { dueDate: '2026-12-01' }));
+    await assertFails(upd('byOwner', { assigneeId: 'member' }));
+    await assertFails(statusUpdate('member', 'byOwner', 'done'));
+  });
+  it('"dueDate": the due date of any task, nothing else', async () => {
+    await grant('member', ['dueDate']);
+    await assertSucceeds(upd('byOwner', { dueDate: '2026-12-01' }));
+    await assertFails(upd('byOwner', { title: 'Not allowed' }));
+  });
+  it('"assign": hand any task to a member', async () => {
+    await assertFails(upd('byOwner', { assigneeId: 'member' }));
+    await grant('member', ['assign']);
+    await assertSucceeds(upd('byOwner', { assigneeId: 'member' }));
+  });
+  it('"status": change the status of any task (still telling the owner)', async () => {
+    await grant('member', ['status']);
+    await assertSucceeds(statusUpdate('member', 'byOwner', 'done'));
+    await assertFails(upd('byOwner', { status: 'in_progress' })); // without telling the owner
+  });
+  it('"delete": delete any task', async () => {
+    await assertFails(deleteDoc(taskRef(as('member'), 'byOwner')));
+    await grant('member', ['delete']);
+    await assertSucceeds(deleteDoc(taskRef(as('member'), 'byOwner')));
+  });
+  it('denies: permissions left behind after a member leaves', async () => {
+    await grant('member', ALL_PERMS);
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(projRef(ctx.firestore()), { memberIds: ['owner'], 'members.member': deleteField() }));
+    await assertFails(deleteDoc(taskRef(as('member'), 'byOwner')));
+    await assertFails(addDoc(tasksCol(as('member')), newTask({ createdBy: 'member' })));
+  });
+});
+
+describe('member permissions (log and notifications)', () => {
+  allows('changing permissions with a log entry and a note to the member', () => inBatch('owner', (b, db) => {
+    b.set(permsRef(db, 'member'), { perms: ['create', 'edit'], updatedAt: ts() });
+    b.set(actRef(db), { ...activity('owner', { type: 'member_perms', targetId: 'member', targetName: NAMES.member }), perms: ['create', 'edit'] });
+    b.set(noteRef(db, 'member'), { ...note('owner', { type: 'perms_changed' }), perms: ['create', 'edit'] });
+  }));
+  denies('a permissions entry that does not match what was saved', () => inBatch('owner', (b, db) => {
+    b.set(permsRef(db, 'member'), { perms: ['create'], updatedAt: ts() });
+    b.set(actRef(db), { ...activity('owner', { type: 'member_perms', targetId: 'member', targetName: NAMES.member }), perms: ALL_PERMS });
+  }));
+  denies('a permissions note that does not match what was saved', () => inBatch('owner', (b, db) => {
+    b.set(permsRef(db, 'member'), { perms: ['create'], updatedAt: ts() });
+    b.set(noteRef(db, 'member'), { ...note('owner', { type: 'perms_changed' }), perms: ALL_PERMS });
+  }));
+  denies('a perms field on any other kind of entry', () => inBatch('member', (b, db) => {
+    const task = doc(tasksCol(db));
+    b.set(task, newTask({ createdBy: 'member' }));
+    b.set(actRef(db), { ...activity('member', { taskId: task.id }), perms: ['edit'] });
+  }));
+  allows('adding a member with their permissions in the log entry and the note', () => inBatch('owner', (b, db) => {
+    b.update(projRef(db), { memberIds: arrayUnion('extra'), 'members.extra': { displayName: NAMES.extra }, updatedAt: ts() });
+    b.set(permsRef(db, 'extra'), { perms: ['create'], updatedAt: ts() });
+    b.set(actRef(db), { ...activity('owner', { type: 'member_added', targetId: 'extra', targetName: NAMES.extra }), perms: ['create'] });
+    b.set(noteRef(db, 'extra'), { ...note('owner', { type: 'member_added' }), perms: ['create'] });
+  }));
+});
+
 describe('everything else is closed', () => {
   denies('reading an unknown collection', () => getDoc(doc(as('owner'), 'admin', 'config')));
   denies('writing an unknown collection', () => setDoc(doc(as('owner'), 'admin', 'config'), { x: 1 }));
