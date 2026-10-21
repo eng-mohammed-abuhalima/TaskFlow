@@ -20,6 +20,7 @@ permission in the UI (`src/lib/permissions.js`) is a mirror of a rule.
 | Tasks: assignee | no | no | ones they created; any with `assign`; on a task assigned to them, only taking themselves off | any |
 | Tasks: change status | no | no | tasks assigned to them; any with `status`; **the owner must be notified in the same write** | any (no notification required) |
 | Tasks: delete | no | no | ones they created; any with `delete` | any |
+| Tasks: board order (`rank`) | no | no | tasks assigned to them; any with `status` (no notification needed; moving to another column is a status change and still tells the owner) | any |
 | Activity log (`projects/{id}/activity`) | no | no | write entries for their own changes; **can't read** | read; delete (used when deleting the project) |
 | Notifications (`users/{uid}/notifications`) | no | no | send one only as part of the change it reports; read / mark read / decline / delete **their own** | same |
 | Chat messages (`projects/{id}/messages`) | no | no | read all; send under their own id and project name (1–1000 characters, server time); delete **their own**; never edit | same, and delete any |
@@ -126,7 +127,7 @@ refuses older versions and prints an error). The first run downloads the emulato
 
 ## Test results
 
-**Automated (`npm run test:rules`): 281 tests in 21 groups, 281 pass.** Every group tests what must be
+**Automated (`npm run test:rules`): 298 tests in 22 groups, 298 pass.** Every group tests what must be
 *allowed* and what must be *denied*, for the owner, a member, an outsider and a signed-out visitor:
 
 | Group | What it covers |
@@ -149,19 +150,20 @@ refuses older versions and prints an error). The first run downloads the emulato
 | Member permissions: who sets them | owner only, only for members (or someone added in the same batch), never for the owner, valid names only, no duplicates or extra fields; members read only their own |
 | Member permissions: what they allow | a viewer can't create; each of `create` / `edit` / `dueDate` / `assign` / `status` / `delete` unlocks exactly its own change on any task; creators keep their own tasks, assignees keep status updates; left-behind permissions give nothing |
 | Member permissions: log and notifications | the entry and the note must match the permissions saved in the same batch |
+| Board order (`rank`) | optional, 1–64 base-62 characters (65, empty, other characters, non-strings denied); owner, assignee or `status` holder only (a creator who isn't assigned and `edit` alone can't); never together with other fields an assignee can't change; a move to another column still needs the owner's notification |
 | Project chat: messages | members read and send, outsiders and signed-out visitors can't; no sending as someone else or under a forged name; empty, blank, 1001-character, non-string, extra-field and client-timestamp messages denied (1000 allowed); no edits; author or owner deletes; a removed member loses access, a new member reads the history |
 | Project chat: read markers | each member sets only their own, at server time, no extra fields; every member reads all of them, outsiders none; only the owner deletes |
 | Everything else | unknown collections and subcollections are closed |
 
-**The tests themselves are tested** (`npm run test:rules:mutations`): the rules are broken on purpose in 24
+**The tests themselves are tested** (`npm run test:rules:mutations`): the rules are broken on purpose in 26
 ways (a member can edit the project, anyone can change a status, emails can be listed, names can be
 forged, any month is accepted, `createdBy` can be changed, a member can delete any task, an outsider can
 read tasks, an unverified email can take over a lookup, a member can read the activity log, log entries need not match a
 real change, anyone can be sent any notification, a decline can be sent to anyone, "leaving" can remove other
 members, a status change need not tell the owner, a status update can go to an outsider, anyone can edit task details, due dates ignore permissions,
 creating tasks ignores permissions, a member can grant themselves permissions, an outsider can read the chat, chat messages can be
-sent under another name, anyone can delete a chat message, "seen" markers can be set for someone else) and the suite must fail each time.
-**All 24 are caught.** Twice a run showed a break slipping through ("leaving" can remove others; and
+sent under another name, anyone can delete a chat message, "seen" markers can be set for someone else, anyone can reorder tasks on the board, any rank is accepted) and the suite must fail each time.
+**All 26 are caught.** Twice a run showed a break slipping through ("leaving" can remove others; and
 "anyone can change a status" once the owner-notification rule made the old tests fail for a different reason),
 so a test aimed at exactly that rule was added each time, each by the tests named after that
 behaviour (1 to 5 failing tests per break), so a passing run isn't just tests that can't fail.

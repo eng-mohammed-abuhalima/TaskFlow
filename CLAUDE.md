@@ -105,7 +105,7 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 - Phase 6 done: `lib/filterTasks.js` (pure, AND-combined filters incl. overdue) + `FilterBar` on the project page;
   real dashboard (`useDashboard` loads projects + their tasks, `lib/taskStats.js` aggregates client-side,
   `components/dashboard/{StatusBreakdown,OverdueList}`). FilterBar members are `[{ uid, name }]`.
-- Phase 7 done: hardened rules + emulator tests (281 after project chat; 24 mutations) (`npm run test:rules`, needs Java 21+; `tests/rules.test.js`), a
+- Phase 7 done: hardened rules + emulator tests (298 after the board rank; 26 mutations) (`npm run test:rules`, needs Java 21+; `tests/rules.test.js`), a
   mutation check that proves the tests catch broken rules (`npm run test:rules:mutations`), `docs/SECURITY.md`.
   Rule names written into `projects.members` must equal the user's own `users/{uid}.displayName`.
 - Phase 8 done: offline = refuse to save with a clear error (`lib/network.js` `guardedWrite`, wrap every Firestore
@@ -144,6 +144,12 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
   `components/chat/{ProjectChat,MessageList}`: floating `ChatLauncher`, sticky column on xl+, `<dialog>` sheet below.
   Task rows lay out by the list's width (container query at 56rem), not the screen. `deleteProject` also clears both.
   New rules take about a minute to reach every server after a deploy (early writes can be denied).
+- Kanban board (added on 2026-10-22): List/Board switch on the project page (`tf-task-view` in localStorage), board lazy-loaded
+  (`components/board/{TaskBoard,BoardCard}`, @dnd-kit core+sortable). Tasks may have `rank` (fractional-indexing key, base 62, ≤64,
+  compared as plain strings, `lib/rank.js`): changed by owner / assignee / `status` holder, same as status. A drop is `updateTask`
+  with `{ status, rank }` (status change = log + owner note as usual), with Undo in the toast (`showToast` returns an id,
+  `dismissToast`). New tasks get the bottom rank of To Do; the owner's board ranks old unranked tasks once (`setRanks`).
+  Left/Right arrows jump columns by screen position (works in RTL); every card has a "Move to" menu (WCAG 2.5.7).
 - Next: phase 10 (delivery). Order: (1) demo script + code-review Q&A prep (explain the Overdue filter:
   `dueDate < today && status !== 'done'`, today = `todayISO()` in Asia/Hebron), (2) 5-8 screenshots in
   `docs/screenshots/` taken by Mohammed in his own browser from the live URL, (3) README LAST (Mohammed's choice):
