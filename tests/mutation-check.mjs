@@ -30,6 +30,10 @@ const mutations = [
   ['due dates ignore permissions', "&& mayChange(['dueDate'], 'dueDate')", ''],
   ['creating tasks ignores permissions', "&& (ownsProject() || can('create'))", ''],
   ['a member can grant themselves permissions', 'allow create, update: if signedIn() && ownerActs()', 'allow create, update: if signedIn()'],
+  ['an outsider can read the chat', 'allow read: if inChat();\n\n        allow create: if inChat()', 'allow read: if signedIn();\n\n        allow create: if inChat()'],
+  ['chat messages can be sent under another name', '&& request.resource.data.authorName == chatProject().members[request.auth.uid].displayName', ''],
+  ['anyone can delete a chat message', "allow delete: if (inChat() && resource.data.authorId == request.auth.uid)", 'allow delete: if (inChat())'],
+  ['"seen" markers can be set for someone else', '&& readerId == request.auth.uid', ''],
   ['"leaving" can remove other members', 'request.resource.data.memberIds == resource.data.memberIds.removeAll([request.auth.uid])', 'true'],
 ];
 

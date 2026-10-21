@@ -722,6 +722,110 @@ describe('member permissions (log and notifications)', () => {
   }));
 });
 
+describe('project chat (messages)', () => {
+  const msgsCol = (db, pid = P) => collection(db, 'projects', pid, 'messages');
+  const msgRef = (db, id, pid = P) => doc(db, 'projects', pid, 'messages', id);
+  const message = (uid, o = {}) => ({ text: 'Hello team', authorId: uid, authorName: NAMES[uid], createdAt: ts(), ...o });
+  const send = (uid, data, pid = P) => addDoc(msgsCol(as(uid), pid), data);
+  const seedMessage = (id, uid) => env.withSecurityRulesDisabled((ctx) =>
+    setDoc(msgRef(ctx.firestore(), id), { text: 'Seeded', authorId: uid, authorName: NAMES[uid], createdAt: Timestamp.now() }));
+
+  allows('a member sending a message', () => send('member', message('member')));
+  allows('the owner sending a message', () => send('owner', message('owner')));
+  allows('a viewer (no task permissions) sending a message', async () => {
+    await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), 'projects', P, 'memberPerms', 'member'), { perms: [], updatedAt: Timestamp.now() }));
+    return send('member', message('member'));
+  });
+  allows('a member reading the chat', async () => {
+    await seedMessage('m1', 'owner');
+    return getDocs(msgsCol(as('member')));
+  });
+  denies('an outsider reading the chat', async () => {
+    await seedMessage('m1', 'owner');
+    return getDocs(msgsCol(as('outsider')));
+  });
+  denies('an outsider reading one message', async () => {
+    await seedMessage('m1', 'owner');
+    return getDoc(msgRef(as('outsider'), 'm1'));
+  });
+  denies('signed out reading the chat', () => getDocs(msgsCol(anon())));
+  denies('an outsider sending a message', () => send('outsider', message('outsider')));
+  denies('sending as someone else', () => send('member', message('member', { authorId: 'owner' })));
+  denies('a forged author name', () => send('member', message('member', { authorName: 'The Boss' })));
+  denies('an empty message', () => send('member', message('member', { text: '' })));
+  denies('a message that is only spaces', () => send('member', message('member', { text: '   ' })));
+  allows('a 1000-character message', () => send('member', message('member', { text: 'x'.repeat(1000) })));
+  denies('a 1001-character message', () => send('member', message('member', { text: 'x'.repeat(1001) })));
+  denies('a text that is not a string', () => send('member', message('member', { text: 42 })));
+  denies('a client-made createdAt', () => send('member', message('member', { createdAt: Timestamp.now() })));
+  denies('an extra field', () => send('member', message('member', { pinned: true })));
+  denies('a missing field', () => send('member', without(message('member'), 'authorName')));
+  denies('editing a message, even your own', async () => {
+    await seedMessage('m1', 'member');
+    return updateDoc(msgRef(as('member'), 'm1'), { text: 'Edited' });
+  });
+  allows('deleting your own message', async () => {
+    await seedMessage('m1', 'member');
+    return deleteDoc(msgRef(as('member'), 'm1'));
+  });
+  denies('a member deleting someone else’s message', async () => {
+    await seedMessage('m1', 'owner');
+    return deleteDoc(msgRef(as('member'), 'm1'));
+  });
+  allows('the owner deleting any message', async () => {
+    await seedMessage('m1', 'member');
+    return deleteDoc(msgRef(as('owner'), 'm1'));
+  });
+  it('denies: a removed member reading, sending or deleting their old message', async () => {
+    await seedMessage('m1', 'member');
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(projRef(ctx.firestore()), {
+      memberIds: ['owner'], members: { owner: { displayName: NAMES.owner } },
+    }));
+    await assertFails(getDocs(msgsCol(as('member'))));
+    await assertFails(send('member', message('member')));
+    await assertFails(deleteDoc(msgRef(as('member'), 'm1')));
+  });
+  it('allows: a newly added member reading earlier messages and sending under their name', async () => {
+    await seedMessage('m1', 'owner');
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(projRef(ctx.firestore()), {
+      memberIds: ['owner', 'member', 'extra'], 'members.extra': { displayName: NAMES.extra },
+    }));
+    await assertSucceeds(getDocs(msgsCol(as('extra'))));
+    await assertSucceeds(send('extra', message('extra')));
+  });
+});
+
+describe('project chat (read markers and "seen")', () => {
+  const readsCol = (db, pid = P) => collection(db, 'projects', pid, 'chatReads');
+  const readRef = (db, uid, pid = P) => doc(db, 'projects', pid, 'chatReads', uid);
+  const markRead = (uid, target = uid, data = { readAt: ts() }) => setDoc(readRef(as(uid), target), data);
+
+  allows('a member marking the chat read', () => markRead('member'));
+  allows('marking it read again later', async () => {
+    await markRead('member');
+    return markRead('member');
+  });
+  denies('marking it read for someone else', () => markRead('member', 'owner'));
+  denies('an outsider marking it read', () => markRead('outsider'));
+  denies('a client-made readAt (faking "seen")', () => markRead('member', 'member', { readAt: Timestamp.now() }));
+  denies('an extra field', () => markRead('member', 'member', { readAt: ts(), hidden: true }));
+  it('allows: every member reading everyone\'s markers; denies: an outsider', async () => {
+    await markRead('owner');
+    await markRead('member');
+    await assertSucceeds(getDocs(readsCol(as('member'))));
+    await assertSucceeds(getDoc(readRef(as('member'), 'owner')));
+    await assertFails(getDocs(readsCol(as('outsider'))));
+    await assertFails(getDoc(readRef(as('outsider'), 'owner')));
+  });
+  it('allows: the owner deleting a marker; denies: a member deleting one', async () => {
+    await markRead('member');
+    await markRead('owner');
+    await assertFails(deleteDoc(readRef(as('member'), 'owner')));
+    await assertFails(deleteDoc(readRef(as('member'), 'member')));
+    await assertSucceeds(deleteDoc(readRef(as('owner'), 'member')));
+  });
+});
+
 describe('everything else is closed', () => {
   denies('reading an unknown collection', () => getDoc(doc(as('owner'), 'admin', 'config')));
   denies('writing an unknown collection', () => setDoc(doc(as('owner'), 'admin', 'config'), { x: 1 }));
