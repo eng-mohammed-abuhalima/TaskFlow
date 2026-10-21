@@ -6,6 +6,7 @@ import { Breadcrumb } from '../components/Breadcrumb.jsx';
 import { EmptyState, Loading, SkeletonTaskRow } from '../components/States.jsx';
 import { TaskRow, taskListClasses } from '../components/Task.jsx';
 import { TaskFormModal } from '../components/TaskFormModal.jsx';
+import { StatusDialog } from '../components/StatusDialog.jsx';
 import { FilterBar } from '../components/FilterBar.jsx';
 import { ConfirmDialog } from '../components/Overlay.jsx';
 import { ProjectStatusView } from '../components/ProjectStatusView.jsx';
@@ -16,7 +17,7 @@ import { useProject } from '../hooks/useProject.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useTasks } from '../hooks/useTasks.js';
 import { createTask, updateTask, deleteTask } from '../services/tasks.js';
-import { canEditTask, canDeleteTask, canChangeStatus } from '../lib/permissions.js';
+import { canEditTaskDetails, canDeleteTask, isProjectOwner } from '../lib/permissions.js';
 import { projectMembers } from '../lib/members.js';
 import { filterTasks, DEFAULT_FILTERS } from '../lib/filterTasks.js';
 import { writeErrorMessage } from '../lib/network.js';
@@ -42,6 +43,7 @@ function ProjectView({ project, isOwner }) {
   const tasks = useTasks(project.id);
   const [form, setForm] = useState({ open: false, task: null });
   const [toDelete, setToDelete] = useState(null);
+  const [statusFor, setStatusFor] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   // Only the owner has the Activity tab (the rules let only the owner read the log).
@@ -61,13 +63,28 @@ function ProjectView({ project, isOwner }) {
   async function handleSubmit(values) {
     try {
       if (form.task) {
-        await updateTask(project, form.task, values, user.uid);
+        // The owner can change the status here; the assignee (if someone else) is told, without a message.
+        const statusChanged = values.status !== form.task.status;
+        await updateTask(project, form.task, values, user.uid, statusChanged ? { recipients: [form.task.assigneeId].filter(Boolean) } : {});
         showToast({ tone: 'success', title: t('Task updated', 'تم تحديث المهمة') });
       } else {
         await createTask(project, values, user.uid);
         showToast({ tone: 'success', title: t('Task created', 'تم إنشاء المهمة') });
       }
       setForm({ open: false, task: form.task });
+    } catch (err) {
+      saveFailed(err);
+      throw err; // keeps the dialog open with the values
+    }
+  }
+
+  /** Status only, from StatusDialog: the other fields are sent unchanged. */
+  async function handleStatus(status, update) {
+    const task = statusFor;
+    try {
+      await updateTask(project, task, { ...task, status }, user.uid, update);
+      showToast({ tone: 'success', title: t('Status updated', 'تم تحديث الحالة') });
+      setStatusFor(null);
     } catch (err) {
       saveFailed(err);
       throw err; // keeps the dialog open with the values
@@ -179,8 +196,10 @@ function ProjectView({ project, isOwner }) {
                   task={{ ...task, due: task.dueDate, assignee: nameOf(task.assigneeId) }}
                   lang={lang}
                   today={today}
-                  canEdit={canEditTask(task, project, user.uid)}
+                  canEdit={canEditTaskDetails(task, project, user.uid)}
                   canDelete={canDeleteTask(task, project, user.uid)}
+                  canChangeStatus={task.assigneeId === user.uid}
+                  onChangeStatus={() => setStatusFor(task)}
                   onEdit={() => setForm({ open: true, task })}
                   onDelete={() => setToDelete(task)}
                 />
@@ -196,9 +215,18 @@ function ProjectView({ project, isOwner }) {
         open={form.open}
         task={form.task}
         members={members}
-        canChangeStatus={form.task ? canChangeStatus(form.task, project, user.uid) : true}
+        showStatus={isProjectOwner(project, user.uid)}
         onSubmit={handleSubmit}
         onClose={() => setForm((f) => ({ ...f, open: false }))}
+      />
+
+      <StatusDialog
+        task={statusFor}
+        members={members}
+        ownerId={project.ownerId}
+        currentUid={user.uid}
+        onSubmit={handleStatus}
+        onClose={() => setStatusFor(null)}
       />
 
       <ConfirmDialog

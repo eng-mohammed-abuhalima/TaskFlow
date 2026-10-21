@@ -67,6 +67,7 @@ export function NotificationsBell() {
 
   return (
     <>
+      {/* Not modal on purpose: the page can still scroll while the list is open (dialogs lock it, this doesn't). */}
       <Popover.Root open={open} onOpenChange={handleOpenChange}>
         <Popover.Trigger className={cx(navbarClasses.tool, 'relative')} aria-label={label} title={t('Notifications', 'الإشعارات')}>
           <Icon icon={Bell} size={20} />
@@ -104,6 +105,7 @@ export function NotificationsBell() {
                       )}
                       <p className="break-words"><NotificationSentence note={note} lang={lang} /></p>
                       {note.reason && <Reason text={note.reason} lang={lang} />}
+                      {note.message && <Reason text={note.message} lang={lang} kind="message" />}
                       <time className="text-caption tabular-nums text-fg-subtle" dateTime={note.at?.toDate?.().toISOString()}>
                         {dayLabel(day, lang, today)} · {formatTime(note.at, lang)}
                       </time>

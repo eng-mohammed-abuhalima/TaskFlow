@@ -101,6 +101,7 @@ export function ActivityFeed({ projectId, lang }) {
                   <div className={activityClasses.text}>
                     <p className="break-words"><ActivitySentence entry={entry} lang={lang} /></p>
                     {entry.reason && <Reason text={entry.reason} lang={lang} />}
+                    {entry.message && <Reason text={entry.message} lang={lang} kind="message" />}
                   </div>
                   <time className={activityClasses.time} dateTime={entry.at?.toDate?.().toISOString()}>{formatTime(entry.at, lang)}</time>
                 </li>

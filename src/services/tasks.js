@@ -65,10 +65,14 @@ export function createTask(project, values, uid) {
 /**
  * Updates the editable fields. `status` is only sent when it changed, so a creator who isn't
  * the assignee can still save the other fields (the rules reject any status change from them).
- * Logs each kind of change on its own (status, assignee, other fields) and tells: a new assignee
- * that they got the task, the current assignee that the due date moved, the owner that a task is done.
+ * Logs each kind of change on its own (status, assignee, other fields) and tells a new assignee
+ * that they got the task, and the current assignee that the due date moved.
+ *
+ * A status change is also a status update: `update.message` (optional) goes to the owner, who is
+ * always told when someone else changes the status (the rules require it, through `statusNoteId`),
+ * and to any members in `update.recipients`.
  */
-export function updateTask(project, task, values, uid) {
+export function updateTask(project, task, values, uid, update = {}) {
   return guardedWrite(() => {
     const data = clean(values);
     const changes = { ...data, updatedAt: serverTimestamp() };
@@ -76,13 +80,21 @@ export function updateTask(project, task, values, uid) {
     if (statusChanged) changes.status = values.status;
 
     const batch = writeBatch(db);
-    batch.update(taskDoc(project.id, task.id), changes);
     const about = { taskId: task.id, taskTitle: data.title };
 
     if (statusChanged) {
-      logActivity(batch, project, uid, { ...about, type: 'task_status', from: task.status, to: values.status });
-      if (values.status === 'done') notify(batch, project, uid, project.ownerId, { ...about, type: 'task_done' });
+      const message = update.message?.trim() || null;
+      const status = { ...about, type: 'task_status', status: values.status, message };
+      logActivity(batch, project, uid, { ...about, type: 'task_status', from: task.status, to: values.status, message });
+      if (uid !== project.ownerId) changes.statusNoteId = notify(batch, project, uid, project.ownerId, status);
+      const others = new Set(update.recipients ?? []);
+      others.delete(project.ownerId);
+      for (const recipient of others) {
+        if (project.memberIds.includes(recipient)) notify(batch, project, uid, recipient, status);
+      }
     }
+    // Added after the notifications: batch.update copies `changes` now, and it needs statusNoteId.
+    batch.update(taskDoc(project.id, task.id), changes);
     const before = task.assigneeId ?? null;
     if (data.assigneeId !== before) {
       if (data.assigneeId) {

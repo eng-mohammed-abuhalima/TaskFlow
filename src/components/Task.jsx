@@ -1,7 +1,8 @@
-import { Pencil, Trash2 } from 'lucide-react';
+import { ChevronDown, Pencil, Trash2 } from 'lucide-react';
 import { cx } from '../lib/cx.js';
+import { Icon } from '../lib/icons.jsx';
 import { Avatar } from './Avatar.jsx';
-import { StatusBadge, PriorityBadge, DueDate } from './Badges.jsx';
+import { StatusBadge, PriorityBadge, DueDate, STATUS_LABELS } from './Badges.jsx';
 import { Button } from './Button.jsx';
 import { isOverdue } from '../lib/i18n.js';
 
@@ -17,10 +18,14 @@ export const taskRowClasses = {
   meta: 'col-span-2 flex flex-wrap items-center gap-x-3 gap-y-2 lg:contents',
   assignee: 'inline-flex min-w-0 items-center gap-2 text-body-sm text-fg-muted',
   actions: 'col-start-2 row-start-1 flex items-center gap-0.5 lg:col-start-auto lg:row-start-auto',
+  // The status pill doubles as the "change status" button for those allowed to change it.
+  statusButton:
+    'inline-flex items-center gap-0.5 rounded-pill pe-1 text-fg-muted transition-colors duration-fast hover:bg-surface-hover hover:text-fg ' +
+    'focus-ring touch-target motion-reduce:transition-none',
 };
 // #endregion
 
-export function TaskRow({ task, lang = 'en', today, canEdit = true, canDelete = true, onEdit, onDelete }) {
+export function TaskRow({ task, lang = 'en', today, canEdit = true, canDelete = true, canChangeStatus = false, onEdit, onDelete, onChangeStatus }) {
   const { title, description, status, priority, due, assignee } = task;
   const t = (en, ar) => (lang === 'ar' ? ar : en);
   return (
@@ -42,7 +47,18 @@ export function TaskRow({ task, lang = 'en', today, canEdit = true, canDelete = 
         </span>
         <span className="inline-flex"><PriorityBadge priority={priority} lang={lang} /></span>
         <span className="inline-flex"><DueDate due={due} status={status} lang={lang} today={today} /></span>
-        <span className="inline-flex"><StatusBadge status={status} lang={lang} /></span>
+        <span className="inline-flex">
+          {canChangeStatus ? (
+            <button type="button" className={taskRowClasses.statusButton} onClick={onChangeStatus}
+              aria-label={t(`Change status of ${title} (now ${STATUS_LABELS.en[status]})`, `تغيير حالة ${title} (حاليًا ${STATUS_LABELS.ar[status]})`)}
+              title={t('Change status', 'تغيير الحالة')}>
+              <StatusBadge status={status} lang={lang} />
+              <Icon icon={ChevronDown} size={14} />
+            </button>
+          ) : (
+            <StatusBadge status={status} lang={lang} />
+          )}
+        </span>
       </div>
       <div className={taskRowClasses.actions}>
         {canEdit && <Button variant="ghost" size="sm" iconOnly icon={Pencil} aria-label={t('Edit ', 'تعديل ') + title} onClick={onEdit} />}

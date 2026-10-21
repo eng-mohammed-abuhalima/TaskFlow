@@ -77,6 +77,12 @@ export function NotificationSentence({ note, lang }) {
         : t(<>{A} removed the due date of {T}</>, <>أزال {A} تاريخ استحقاق المهمة {T}</>);
     case 'task_deleted':
       return t(<>{A} deleted {T}, which was assigned to you</>, <>حذف {A} المهمة {T} المسندة إليك</>);
+    case 'task_status':
+      return t(
+        <>{A} moved {T} in {P} to <b className="font-medium text-fg">{STATUS_LABELS.en[note.status] ?? note.status}</b></>,
+        <>غيّر {A} حالة المهمة {T} في مشروع {P} إلى <b className="font-medium text-fg">{STATUS_LABELS.ar[note.status] ?? note.status}</b></>
+      );
+    // Older notifications, from before status updates replaced them.
     case 'task_done':
       return t(<>{A} completed {T} in {P}</>, <>أنجز {A} المهمة {T} في مشروع {P}</>);
     case 'task_declined':
@@ -90,11 +96,12 @@ export function NotificationSentence({ note, lang }) {
   }
 }
 
-/** "Reason: …" under a decline, in the reader's language. */
-export function Reason({ text, lang }) {
+/** "Reason: …" under a decline, or "Message: …" under a status update, in the reader's language. */
+export function Reason({ text, lang, kind = 'reason' }) {
+  const label = kind === 'message' ? (lang === 'ar' ? 'الرسالة: ' : 'Message: ') : (lang === 'ar' ? 'السبب: ' : 'Reason: ');
   return (
     <p className="mt-1.5 rounded-tight border-s-2 border-subtle bg-surface-sunken px-2.5 py-1.5 text-body-sm text-fg-muted">
-      <span className="font-medium text-fg">{lang === 'ar' ? 'السبب: ' : 'Reason: '}</span>
+      <span className="font-medium text-fg">{label}</span>
       <span className="user-text whitespace-pre-line break-words">{text}</span>
     </p>
   );

@@ -13,7 +13,7 @@ const activityCol = (projectId) => collection(db, 'projects', projectId, 'activi
 
 const EMPTY = {
   taskId: null, taskTitle: null, targetId: null, targetName: null,
-  from: null, to: null, fields: null, reason: null,
+  from: null, to: null, fields: null, reason: null, message: null,
 };
 
 /** Adds one entry to `batch`. `fields` overrides EMPTY (type, taskId, targetId, …). */

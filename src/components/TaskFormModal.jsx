@@ -11,11 +11,13 @@ import { validateTaskTitle, validateDescription, compact, TASK_TITLE, DESCRIPTIO
 const NONE = 'none'; // Radix Select can't use an empty string as a value
 
 /**
- * Create / edit task dialog. `task` = null means create.
- * members: [{ uid, name }]. canChangeStatus locks the status field (edit only).
+ * Create / edit task dialog. `task` = null means create. Only the owner and the task's creator open it.
+ * `showStatus`: the owner also changes the status here (edit only). The assignee uses StatusDialog
+ * (status + optional message) from the task row instead.
+ * members: [{ uid, name }].
  * onSubmit(values) should throw on failure; the dialog then stays open with the values kept.
  */
-export function TaskFormModal({ open, task, members, canChangeStatus = true, onSubmit, onClose }) {
+export function TaskFormModal({ open, task, members, showStatus = false, onSubmit, onClose }) {
   const { t } = usePrefs();
   const editing = Boolean(task);
   return (
@@ -23,14 +25,13 @@ export function TaskFormModal({ open, task, members, canChangeStatus = true, onS
       closeLabel={t('Close', 'إغلاق')} className="max-w-lg">
       {/* Mounted only while open, keyed by task, so every opening starts from fresh values. */}
       {open && (
-        <TaskForm key={task?.id ?? 'new'} task={task} members={members} canChangeStatus={canChangeStatus}
-          onSubmit={onSubmit} onCancel={onClose} />
+        <TaskForm key={task?.id ?? 'new'} task={task} members={members} showStatus={showStatus} onSubmit={onSubmit} onCancel={onClose} />
       )}
     </Modal>
   );
 }
 
-function TaskForm({ task, members, canChangeStatus, onSubmit, onCancel }) {
+function TaskForm({ task, members, showStatus, onSubmit, onCancel }) {
   const { t, lang } = usePrefs();
   const editing = Boolean(task);
   const [values, setValues] = useState({
@@ -78,10 +79,8 @@ function TaskForm({ task, members, canChangeStatus, onSubmit, onCancel }) {
         value={values.description} onChange={(e) => set('description')(e.target.value)} error={errors.description} disabled={saving}
         count={counter(values.description, DESCRIPTION_MAX)} />
       <div className="grid gap-4 @sm:grid-cols-2">
-        {editing && (
-          <Select label={t('Status', 'الحالة')} options={statusOptions(lang)} value={values.status} onChange={set('status')}
-            disabled={saving || !canChangeStatus}
-            hint={canChangeStatus ? undefined : t('Only the assignee or the owner can change the status.', 'يمكن للمسؤول عن المهمة أو المالك فقط تغيير الحالة.')} />
+        {editing && showStatus && (
+          <Select label={t('Status', 'الحالة')} options={statusOptions(lang)} value={values.status} onChange={set('status')} disabled={saving} />
         )}
         <Select label={t('Priority', 'الأولوية')} options={priorityOptions(lang)} value={values.priority} onChange={set('priority')} disabled={saving} />
         <DateField label={t('Due date', 'تاريخ الاستحقاق')} lang={lang} today={todayISO()} value={values.dueDate} onChange={set('dueDate')} />

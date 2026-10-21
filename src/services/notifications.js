@@ -14,12 +14,16 @@ import { logActivity } from './activity.js';
 
 const notesCol = (uid) => collection(db, 'users', uid, 'notifications');
 
-const EMPTY = { taskId: null, taskTitle: null, reason: null, dueDate: null, sourceId: null };
+const EMPTY = { taskId: null, taskTitle: null, reason: null, dueDate: null, sourceId: null, status: null, message: null };
 
-/** Adds a notification for `recipientId` to `batch`. Nobody is notified about their own action. */
+/**
+ * Adds a notification for `recipientId` to `batch` and returns its id (null when nobody is notified:
+ * nobody gets a notification about their own action).
+ */
 export function notify(batch, project, actorId, recipientId, fields) {
-  if (!recipientId || recipientId === actorId) return;
-  batch.set(doc(notesCol(recipientId)), {
+  if (!recipientId || recipientId === actorId) return null;
+  const ref = doc(notesCol(recipientId));
+  batch.set(ref, {
     ...EMPTY,
     ...fields,
     projectId: project.id,
@@ -30,6 +34,7 @@ export function notify(batch, project, actorId, recipientId, fields) {
     read: false,
     response: null,
   });
+  return ref.id;
 }
 
 /** The latest `max` notifications, newest first. Returns the unsubscribe function. */
