@@ -310,13 +310,22 @@ describe('updating tasks', () => {
 
   allows('the owner editing any task', () => upd('owner', 'byMember', { title: 'Edited by owner' }));
   allows('the creator editing their task', () => upd('member', 'byMember', { title: 'Edited by creator' }));
-  allows('the assignee editing the task', () => upd('member', 'assignedToMember', { description: 'My note' }));
+  // Only assigned (not the creator): status updates and taking themselves off the task, nothing else.
+  denies('the assignee editing the description', () => upd('member', 'assignedToMember', { description: 'My note' }));
+  denies('the assignee editing the title', () => upd('member', 'assignedToMember', { title: 'Renamed by assignee' }));
+  denies('the assignee changing the priority', () => upd('member', 'assignedToMember', { priority: 'high' }));
+  denies('the assignee moving the due date', () => upd('member', 'assignedToMember', { dueDate: '2026-12-31' }));
+  denies('the assignee handing the task to someone else', () => upd('member', 'assignedToMember', { assigneeId: 'owner' }));
+  allows('the assignee taking themselves off the task', () => upd('member', 'assignedToMember', { assigneeId: null }));
+  denies('the assignee changing the status and the title together', () =>
+    statusUpdate('member', 'assignedToMember', 'done', { task: { title: 'Sneaky rename' } }));
   denies('a member editing a task they neither made nor were given', () => upd('member', 'byOwner', { title: 'Hijacked' }));
   denies('an outsider editing', () => upd('outsider', 'byOwner', { title: 'Hijacked' }));
   denies('a signed-out visitor editing', () => updateDoc(taskRef(anon(), 'byOwner'), { title: 'Hijacked', updatedAt: ts() }));
 
   allows('the owner changing the status', () => upd('owner', 'byMember', { status: 'done' }));
-  allows('the assignee changing the status (US-06)', () => upd('member', 'assignedToMember', { status: 'in_progress' }));
+  allows('the assignee changing the status, telling the owner (US-06)', () => statusUpdate('member', 'assignedToMember', 'in_progress'));
+  denies('the assignee changing the status without telling the owner', () => upd('member', 'assignedToMember', { status: 'in_progress' }));
   denies('the creator changing the status when not assigned', () => upd('member', 'byMember', { status: 'done' }));
   denies('a member changing the status of someone else’s task', () => upd('member', 'byOwner', { status: 'done' }));
   denies('self-assigning and changing the status in one write', () => upd('member', 'byMember', { assigneeId: 'member', status: 'done' }));
@@ -355,16 +364,32 @@ const actRef = (db, pid = P) => doc(collection(db, 'projects', pid, 'activity'))
 const noteRef = (db, uid, id) => (id ? doc(db, 'users', uid, 'notifications', id) : doc(collection(db, 'users', uid, 'notifications')));
 const activity = (actor, o = {}) => ({
   type: 'task_created', actorId: actor, actorName: NAMES[actor], taskId: null, taskTitle: null, targetId: null,
-  targetName: null, from: null, to: null, fields: null, reason: null, at: ts(), ...o,
+  targetName: null, from: null, to: null, fields: null, reason: null, message: null, at: ts(), ...o,
 });
 const note = (actor, o = {}) => ({
   type: 'task_assigned', projectId: P, projectName: 'Website Redesign', taskId: null, taskTitle: null, actorId: actor,
-  actorName: NAMES[actor], reason: null, dueDate: null, sourceId: null, at: ts(), read: false, response: null, ...o,
+  actorName: NAMES[actor], reason: null, dueDate: null, sourceId: null, status: null, message: null, at: ts(), read: false,
+  response: null, ...o,
 });
 /** Runs fn(batch, db) as `uid` and commits. */
 const inBatch = (uid, fn) => { const db = as(uid); const batch = writeBatch(db); fn(batch, db); return batch.commit(); };
 const seedDoc = (path, data) => env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), ...path), data));
 const REASON = 'I am on leave this week';
+const addExtraToProject = () => env.withSecurityRulesDisabled((ctx) => updateDoc(projRef(ctx.firestore()), {
+  memberIds: arrayUnion('extra'), 'members.extra': { displayName: NAMES.extra },
+}));
+
+/**
+ * A status change the way the app sends it: the task names the owner's new notification
+ * (statusNoteId), the notification and a log entry go in the same batch. `o` adjusts each part.
+ */
+const statusUpdate = (uid, taskId, to, o = {}) => inBatch(uid, (b, db) => {
+  const ownerNote = noteRef(db, o.noteTo ?? 'owner');
+  b.update(taskRef(db, taskId), { status: to, statusNoteId: o.statusNoteId ?? ownerNote.id, updatedAt: ts(), ...o.task });
+  if (!o.skipNote) b.set(ownerNote, note(uid, { type: 'task_status', taskId: o.noteTaskId ?? taskId, status: to, message: o.message ?? null }));
+  for (const extra of o.also ?? []) b.set(noteRef(db, extra), note(uid, { type: 'task_status', taskId, status: to, message: o.message ?? null }));
+  if (o.log !== false) b.set(actRef(db), activity(uid, { type: 'task_status', taskId, from: o.from ?? 'todo', to, message: o.message ?? null }));
+});
 
 describe('leaving a project', () => {
   const leave = (db, uid) => updateDoc(projRef(db), { memberIds: arrayRemove(uid), [`members.${uid}`]: deleteField(), updatedAt: ts() });
@@ -406,13 +431,15 @@ describe('activity log', () => {
   }));
   denies('an outsider writing into the log', () => setDoc(actRef(as('outsider')), activity('outsider', { type: 'project_updated', fields: ['name'] })));
 
-  allows('the assignee changing the status with a matching entry', () => inBatch('member', (b, db) => {
-    b.update(taskRef(db, 'assignedToMember'), { status: 'in_progress', updatedAt: ts() });
-    b.set(actRef(db), activity('member', { type: 'task_status', taskId: 'assignedToMember', from: 'todo', to: 'in_progress' }));
+  allows('the assignee changing the status with a matching entry', () => statusUpdate('member', 'assignedToMember', 'in_progress'));
+  denies('a status entry that does not match the change', () => inBatch('owner', (b, db) => {
+    b.update(taskRef(db, 'byOwner'), { status: 'in_progress', updatedAt: ts() });
+    b.set(actRef(db), activity('owner', { type: 'task_status', taskId: 'byOwner', from: 'todo', to: 'done' }));
   }));
-  denies('a status entry that does not match the change', () => inBatch('member', (b, db) => {
-    b.update(taskRef(db, 'assignedToMember'), { status: 'in_progress', updatedAt: ts() });
-    b.set(actRef(db), activity('member', { type: 'task_status', taskId: 'assignedToMember', from: 'todo', to: 'done' }));
+  denies('a message on an entry that is not a status update', () => inBatch('member', (b, db) => {
+    const task = doc(tasksCol(db));
+    b.set(task, newTask({ createdBy: 'member' }));
+    b.set(actRef(db), activity('member', { taskId: task.id, message: 'Hello' }));
   }));
   allows('deleting a task with its entry', () => inBatch('owner', (b, db) => {
     b.delete(taskRef(db, 'byOwner'));
@@ -481,13 +508,26 @@ describe('notifications', () => {
     b.delete(taskRef(db, 'assignedToMember'));
     b.set(noteRef(db, 'member'), note('owner', { type: 'task_deleted', taskId: 'assignedToMember', taskTitle: 'A task' }));
   }));
-  allows('telling the owner a task is done', () => inBatch('member', (b, db) => {
+  it('allows: a status update with a message, to the owner and a member the sender picked', async () => {
+    await addExtraToProject();
+    await assertSucceeds(statusUpdate('member', 'assignedToMember', 'done', { message: 'Shipped, please review', also: ['extra'] }));
+  });
+  denies('a status update sent to someone outside the project', () =>
+    statusUpdate('member', 'assignedToMember', 'done', { also: ['outsider'] }));
+  allows('the owner changing the status and telling the assignee (nothing required)', () => inBatch('owner', (b, db) => {
     b.update(taskRef(db, 'assignedToMember'), { status: 'done', updatedAt: ts() });
-    b.set(noteRef(db, 'owner'), note('member', { type: 'task_done', taskId: 'assignedToMember' }));
+    b.set(noteRef(db, 'member'), note('owner', { type: 'task_status', taskId: 'assignedToMember', status: 'done', message: 'Closing this one' }));
   }));
-  denies('a "done" note to someone who is not the owner', () => inBatch('owner', (b, db) => {
-    b.update(taskRef(db, 'byOwner'), { status: 'done', updatedAt: ts() });
-    b.set(noteRef(db, 'member'), note('owner', { type: 'task_done', taskId: 'byOwner' }));
+  denies('a status note when the status did not change', () => inBatch('owner', (b, db) => {
+    b.update(taskRef(db, 'assignedToMember'), { title: 'Same status', updatedAt: ts() });
+    b.set(noteRef(db, 'member'), note('owner', { type: 'task_status', taskId: 'assignedToMember', status: 'todo' }));
+  }));
+  denies('a status note with a 301-character message', () =>
+    statusUpdate('member', 'assignedToMember', 'done', { message: 'x'.repeat(301) }));
+  denies('a message on a note that is not a status update', () => inBatch('owner', (b, db) => {
+    const task = doc(tasksCol(db));
+    b.set(task, newTask({ createdBy: 'owner', assigneeId: 'member' }));
+    b.set(noteRef(db, 'member'), note('owner', { taskId: task.id, message: 'Hi' }));
   }));
 
   it('allows: the recipient reading and marking read; denies: anyone else reading it', async () => {
@@ -543,6 +583,32 @@ describe('notifications', () => {
   denies('declining a project without a reason', () => leaveProject(''));
   it('denies: a "left" note while still a member', () =>
     assertFails(setDoc(noteRef(as('member'), 'owner'), note('member', { type: 'member_left', reason: REASON }))));
+});
+
+describe('status updates must tell the owner', () => {
+  allows('the assignee with the owner notified (statusNoteId points at it)', () => statusUpdate('member', 'assignedToMember', 'done'));
+  denies('the assignee naming a notification that is never written', () =>
+    statusUpdate('member', 'assignedToMember', 'done', { skipNote: true }));
+  it('denies: the assignee sending the required note to another member instead of the owner', async () => {
+    await addExtraToProject();
+    await assertFails(statusUpdate('member', 'assignedToMember', 'done', { noteTo: 'extra' }));
+  });
+  denies('the required note being about another task', () =>
+    statusUpdate('member', 'assignedToMember', 'done', { noteTaskId: 'byOwner' }));
+  it('denies: reusing the notification of an earlier status change', async () => {
+    await seedDoc(['users', 'owner', 'notifications', 'old'], { ...note('member', { type: 'task_status', taskId: 'assignedToMember', status: 'in_progress' }), at: Timestamp.now() });
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(taskRef(ctx.firestore(), 'assignedToMember'), { statusNoteId: 'old' }));
+    await assertFails(statusUpdate('member', 'assignedToMember', 'done', { statusNoteId: 'old', skipNote: true }));
+  });
+  // Telling the owner doesn't grant the right: only the assignee (or the owner) changes the status.
+  denies('the creator (not assigned) changing the status even with the owner notified', () =>
+    statusUpdate('member', 'byMember', 'done'));
+  denies('a member changing someone else’s task status even with the owner notified', () =>
+    statusUpdate('member', 'byOwner', 'done'));
+  denies('creating a task that already names a status note', () =>
+    addDoc(tasksCol(as('member')), { ...newTask({ createdBy: 'member' }), statusNoteId: 'n1' }));
+  allows('the owner changing the status with no notification at all', () =>
+    updateDoc(taskRef(as('owner'), 'assignedToMember'), { status: 'done', updatedAt: ts() }));
 });
 
 describe('everything else is closed', () => {

@@ -12,7 +12,7 @@ const original = readFileSync(join(ROOT, 'firestore.rules'), 'utf8');
 
 const mutations = [
   ['a member can edit the project', 'allow update: if signedIn() && isOwner()', 'allow update: if signedIn()'],
-  ['anyone can change a task status', '|| ownsProject() || resource.data.assigneeId == request.auth.uid);', '|| true);'],
+  ['anyone can change a task status', '|| ownsProject() || resource.data.assigneeId == request.auth.uid)\n', '|| true)\n'],
   ['emails can be listed', 'allow list: if false;', 'allow list: if signedIn();'],
   ['member names can be forged', '&& entry.displayName == get(/databases/$(database)/documents/users/$(uid)).data.displayName;', '&& true;'],
   ['any month is accepted in due dates', '(0[1-9]|1[0-2])', '[0-9]{2}'],
@@ -24,6 +24,9 @@ const mutations = [
   ['log entries need not match a real change', '&& entry().at == request.time\n          && matchesChange();', '&& entry().at == request.time;'],
   ['anyone can be sent any notification', '&& note().response == null\n          && matchesChange();', '&& note().response == null;'],
   ['a decline can be sent to anyone', '\n                && answersAssignment())', ')'],
+  ['a status change need not tell the owner', '|| ownsProject() || ownerNotified());', '|| true);'],
+  ['a status update can go to someone outside the project', "(type == 'task_status' && hasTask() && uid in projectBefore().memberIds", "(type == 'task_status' && hasTask()"],
+  ['an assignee can edit the whole task', '|| resource.data.createdBy == request.auth.uid || assigneeOnlyChange());', '|| true);'],
   ['"leaving" can remove other members', 'request.resource.data.memberIds == resource.data.memberIds.removeAll([request.auth.uid])', 'true'],
 ];
 

@@ -21,6 +21,11 @@ service cloud.firestore {
       return reason is string && reason.trim().size() >= 3 && reason.size() <= 300;
     }
 
+    // Optional note sent with a status update.
+    function validMessage(message) {
+      return message == null || (message is string && message.trim().size() >= 1 && message.size() <= 300);
+    }
+
     // Private profile: only its owner reads or writes it. Project members see each other's names
     // through projects/{id}.members instead (a copy kept by the project owner).
     match /users/{uid} {
@@ -60,7 +65,7 @@ service cloud.firestore {
         }
         function noteKeys() {
           return ['type', 'projectId', 'projectName', 'taskId', 'taskTitle', 'actorId', 'actorName',
-            'reason', 'dueDate', 'sourceId', 'at', 'read', 'response'];
+            'reason', 'dueDate', 'sourceId', 'status', 'message', 'at', 'read', 'response'];
         }
         function hasTask() {
           return note().taskId is string && note().taskId.size() <= 64;
@@ -81,8 +86,10 @@ service cloud.firestore {
                 && get(taskPath()).data.dueDate != note().dueDate && getAfter(taskPath()).data.dueDate == note().dueDate)
             || (type == 'task_deleted' && hasTask()
                 && get(taskPath()).data.assigneeId == uid && !existsAfter(taskPath()))
-            || (type == 'task_done' && hasTask() && uid == projectBefore().ownerId
-                && get(taskPath()).data.status != 'done' && getAfter(taskPath()).data.status == 'done')
+            // A status update, sent to the owner (required, see the task rules) and/or members the sender picks.
+            || (type == 'task_status' && hasTask() && uid in projectBefore().memberIds
+                && note().status in ['todo', 'in_progress', 'done']
+                && get(taskPath()).data.status != note().status && getAfter(taskPath()).data.status == note().status)
             || (type == 'task_declined' && hasTask() && validReason(note().reason) && note().sourceId is string
                 && get(taskPath()).data.assigneeId == request.auth.uid && getAfter(taskPath()).data.assigneeId == null
                 && answersAssignment())
@@ -117,6 +124,9 @@ service cloud.firestore {
           && (note().reason == null || validReason(note().reason))
           && (note().dueDate == null || (note().dueDate is string && note().dueDate.size() == 10))
           && (note().sourceId == null || (note().sourceId is string && note().sourceId.size() <= 64))
+          && (note().status == null || note().type == 'task_status')
+          && validMessage(note().message)
+          && (note().message == null || note().type == 'task_status')
           && note().at == request.time
           && note().read == false
           && note().response == null
@@ -263,7 +273,7 @@ service cloud.firestore {
         }
         function entryKeys() {
           return ['type', 'actorId', 'actorName', 'taskId', 'taskTitle', 'targetId', 'targetName',
-            'from', 'to', 'fields', 'reason', 'at'];
+            'from', 'to', 'fields', 'reason', 'message', 'at'];
         }
         function hasTask() {
           return entry().taskId is string && entry().taskId.size() <= 64;
@@ -322,6 +332,8 @@ service cloud.firestore {
           && optStatus(entry().to)
           && validFields()
           && (entry().reason == null || validReason(entry().reason))
+          && validMessage(entry().message)
+          && (entry().message == null || entry().type == 'task_status')
           && entry().at == request.time
           && matchesChange();
       }
@@ -348,8 +360,29 @@ service cloud.firestore {
             && (data.dueDate == null || (data.dueDate is string
                 && data.dueDate.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')));
         }
-        function taskKeys() {
+        function requiredTaskKeys() {
           return ['title', 'description', 'status', 'priority', 'assigneeId', 'dueDate', 'createdBy', 'createdAt', 'updatedAt'];
+        }
+        // statusNoteId: id of the owner's notification for the latest status change (optional field).
+        function taskKeys() {
+          return requiredTaskKeys().concat(['statusNoteId']);
+        }
+        function assigneeOnlyChange() {
+          return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'statusNoteId', 'updatedAt', 'assigneeId'])
+            && (request.resource.data.assigneeId == resource.data.assigneeId || request.resource.data.assigneeId == null);
+        }
+        // When anyone but the owner changes the status, the owner must be notified in the same batch:
+        // the task names a NEW notification id, and that notification must exist afterwards in the
+        // owner's inbox as a status update for this task from this user.
+        function ownerNotified() {
+          let id = request.resource.data.get('statusNoteId', null);
+          let notePath = /databases/$(database)/documents/users/$(project().ownerId)/notifications/$(id);
+          return id is string && id.size() <= 64
+            && id != resource.data.get('statusNoteId', null)
+            && existsAfter(notePath)
+            && getAfter(notePath).data.type == 'task_status'
+            && getAfter(notePath).data.taskId == taskId
+            && getAfter(notePath).data.actorId == request.auth.uid;
         }
 
         allow read: if inProject();
@@ -357,8 +390,9 @@ service cloud.firestore {
         // Any member; always starts as "todo" and is credited to its creator.
         allow create: if inProject()
           && request.resource.data.keys().hasOnly(taskKeys())
-          && request.resource.data.keys().hasAll(taskKeys())
+          && request.resource.data.keys().hasAll(requiredTaskKeys())
           && validTask(request.resource.data)
+          && !('statusNoteId' in request.resource.data)
           && request.resource.data.status == 'todo'
           && request.resource.data.createdBy == request.auth.uid
           && request.resource.data.createdAt == request.time
@@ -374,7 +408,12 @@ service cloud.firestore {
           && request.resource.data.createdAt == resource.data.createdAt
           && request.resource.data.updatedAt == request.time
           && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])
-              || ownsProject() || resource.data.assigneeId == request.auth.uid);
+              || ownsProject() || resource.data.assigneeId == request.auth.uid)
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])
+              || ownsProject() || ownerNotified())
+          // Someone who is only the assignee (neither owner nor creator) can update the status, or take
+          // themselves off the task (declining, leaving), and nothing else.
+          && (ownsProject() || resource.data.createdBy == request.auth.uid || assigneeOnlyChange());
 
         // Owner or creator.
         allow delete: if ownsProject() || (inProject() && resource.data.createdBy == request.auth.uid);
