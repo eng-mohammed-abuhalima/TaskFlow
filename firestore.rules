@@ -395,6 +395,55 @@ service cloud.firestore {
         allow delete: if signedIn() && ownerActs();
       }
 
+      // Project chat: every member reads and writes it, always under their own id and their name as it
+      // appears in the project's `members`. Messages never change; their author or the owner deletes them.
+      match /messages/{messageId} {
+        function chatProject() {
+          return get(/databases/$(database)/documents/projects/$(projectId)).data;
+        }
+        function inChat() {
+          return signedIn() && request.auth.uid in chatProject().memberIds;
+        }
+
+        allow read: if inChat();
+
+        allow create: if inChat()
+          && request.resource.data.keys().hasOnly(['text', 'authorId', 'authorName', 'createdAt'])
+          && request.resource.data.keys().hasAll(['text', 'authorId', 'authorName', 'createdAt'])
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.authorName == chatProject().members[request.auth.uid].displayName
+          && request.resource.data.text is string
+          && request.resource.data.text.trim().size() >= 1
+          && request.resource.data.text.size() <= 1000
+          && request.resource.data.createdAt == request.time;
+
+        allow update: if false;
+
+        allow delete: if (inChat() && resource.data.authorId == request.auth.uid)
+          || (signedIn() && request.auth.uid == chatProject().ownerId);
+      }
+
+      // When each member last opened the chat (unread count + "seen" ticks). Every member reads all of
+      // them; each member writes only their own. The owner deletes them (removing a member, deleting the project).
+      match /chatReads/{readerId} {
+        function readsProject() {
+          return get(/databases/$(database)/documents/projects/$(projectId)).data;
+        }
+        function inChat() {
+          return signedIn() && request.auth.uid in readsProject().memberIds;
+        }
+
+        allow read: if inChat();
+
+        allow create, update: if inChat()
+          && readerId == request.auth.uid
+          && request.resource.data.keys().hasOnly(['readAt'])
+          && request.resource.data.keys().hasAll(['readAt'])
+          && request.resource.data.readAt == request.time;
+
+        allow delete: if signedIn() && request.auth.uid == readsProject().ownerId;
+      }
+
       // Tasks. Keep in sync with src/lib/permissions.js.
       match /tasks/{taskId} {
         function project() {
