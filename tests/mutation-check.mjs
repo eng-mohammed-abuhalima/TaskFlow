@@ -24,7 +24,7 @@ const mutations = [
   ['log entries need not match a real change', '&& entry().at == request.time\n          && matchesChange();', '&& entry().at == request.time;'],
   ['anyone can be sent any notification', '&& note().response == null\n          && matchesChange();', '&& note().response == null;'],
   ['a decline can be sent to anyone', '\n                && answersAssignment())', ')'],
-  ['a status change need not tell the owner', '|| ownsProject() || ownerNotified());', '|| true);'],
+  ['a status change need not tell the owner', '|| ownsProject() || ownerNotified())', '|| true)'],
   ['a status update can go to someone outside the project', "(type == 'task_status' && hasTask() && uid in projectBefore().memberIds", "(type == 'task_status' && hasTask()"],
   ['anyone can edit task details', "&& mayChange(['title', 'description', 'priority'], 'edit')", ''],
   ['due dates ignore permissions', "&& mayChange(['dueDate'], 'dueDate')", ''],
@@ -34,6 +34,8 @@ const mutations = [
   ['chat messages can be sent under another name', '&& request.resource.data.authorName == chatProject().members[request.auth.uid].displayName', ''],
   ['anyone can delete a chat message', "allow delete: if (inChat() && resource.data.authorId == request.auth.uid)", 'allow delete: if (inChat())'],
   ['"seen" markers can be set for someone else', '&& readerId == request.auth.uid', ''],
+  ['anyone can reorder tasks on the board', "&& (!changed().hasAny(['rank']) || ownsProject() || isAssignee() || can('status'))", '&& true'],
+  ['any rank is accepted', "data.rank.matches('^[0-9A-Za-z]{1,64}$')", 'true'],
   ['"leaving" can remove other members', 'request.resource.data.memberIds == resource.data.memberIds.removeAll([request.auth.uid])', 'true'],
 ];
 

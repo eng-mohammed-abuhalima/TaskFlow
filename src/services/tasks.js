@@ -46,13 +46,16 @@ const nameOf = (project, uid) => (uid ? memberName(project, uid) : null);
   and the change are saved together or not at all (the rules check one against the other).
 */
 
-/** New tasks always start as "todo" (SRS FR-11); the rules enforce it too. */
+/** New tasks always start as "todo" (SRS FR-11); the rules enforce it too. `values.rank`: its place on the board. */
 export function createTask(project, values, uid) {
   return guardedWrite(() => {
     const data = clean(values);
     const ref = doc(tasksCol(project.id));
     const batch = writeBatch(db);
-    batch.set(ref, { ...data, status: 'todo', createdBy: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    batch.set(ref, {
+      ...data, ...(values.rank ? { rank: values.rank } : {}),
+      status: 'todo', createdBy: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    });
     logActivity(batch, project, uid, {
       type: 'task_created', taskId: ref.id, taskTitle: data.title,
       targetId: data.assigneeId, targetName: nameOf(project, data.assigneeId),
@@ -71,6 +74,9 @@ export function createTask(project, values, uid) {
  * A status change is also a status update: `update.message` (optional) goes to the owner, who is
  * always told when someone else changes the status (the rules require it, through `statusNoteId`),
  * and to any members in `update.recipients`.
+ *
+ * `values.rank` (optional) moves the task on the board; a drag to another column is just a status
+ * change with a new rank, so it's logged and notified like any other.
  */
 export function updateTask(project, task, values, uid, update = {}) {
   return guardedWrite(() => {
@@ -78,6 +84,7 @@ export function updateTask(project, task, values, uid, update = {}) {
     const changes = { ...data, updatedAt: serverTimestamp() };
     const statusChanged = values.status !== task.status;
     if (statusChanged) changes.status = values.status;
+    if (values.rank && values.rank !== task.rank) changes.rank = values.rank;
 
     const batch = writeBatch(db);
     const about = { taskId: task.id, taskTitle: data.title };
@@ -108,6 +115,18 @@ export function updateTask(project, task, values, uid, update = {}) {
     }
     const fields = editedFields(task, data);
     if (fields.length) logActivity(batch, project, uid, { ...about, type: 'task_updated', fields });
+    return batch.commit();
+  });
+}
+
+/**
+ * Gives tasks their board order ([{ id, rank }]) without other changes. Not logged: reordering isn't a
+ * change to the task. The owner's board uses it once for tasks made before the board existed.
+ */
+export function setRanks(projectId, ranks) {
+  return guardedWrite(() => {
+    const batch = writeBatch(db);
+    for (const { id, rank } of ranks) batch.update(taskDoc(projectId, id), { rank, updatedAt: serverTimestamp() });
     return batch.commit();
   });
 }

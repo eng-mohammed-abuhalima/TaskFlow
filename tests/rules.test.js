@@ -722,6 +722,39 @@ describe('member permissions (log and notifications)', () => {
   }));
 });
 
+describe('board order (rank)', () => {
+  const upd = (uid, id, data) => updateDoc(taskRef(as(uid), id), { ...data, updatedAt: ts() });
+
+  allows('creating a task with a rank', () => addDoc(tasksCol(as('member')), newTask({ rank: 'a0' })));
+  allows('a 64-character rank', () => addDoc(tasksCol(as('member')), newTask({ rank: 'a'.repeat(64) })));
+  denies('a 65-character rank', () => addDoc(tasksCol(as('member')), newTask({ rank: 'a'.repeat(65) })));
+  denies('an empty rank', () => addDoc(tasksCol(as('member')), newTask({ rank: '' })));
+  denies('a rank with other characters', () => addDoc(tasksCol(as('member')), newTask({ rank: 'a0 b' })));
+  denies('a rank that is not a string', () => addDoc(tasksCol(as('member')), newTask({ rank: 3 })));
+
+  allows('the owner reordering any task', () => upd('owner', 'byMember', { rank: 'Zz' }));
+  allows('the assignee reordering their task, with no notification', () => upd('member', 'assignedToMember', { rank: 'a1' }));
+  denies('the creator reordering a task they are not assigned to', () => upd('member', 'byMember', { rank: 'a1' }));
+  denies('a member reordering someone else’s task', () => upd('member', 'byOwner', { rank: 'a1' }));
+  denies('an outsider reordering', () => upd('outsider', 'byOwner', { rank: 'a1' }));
+  denies('reordering and renaming in one write (assignee)', () => upd('member', 'assignedToMember', { rank: 'a1', title: 'Sneaky rename' }));
+  denies('an invalid rank on update', () => upd('owner', 'byOwner', { rank: 'not valid!' }));
+  allows('the assignee moving a task to another column and position, telling the owner', () =>
+    statusUpdate('member', 'assignedToMember', 'in_progress', { task: { rank: 'a2' } }));
+  denies('moving to another column with a rank but without telling the owner', () =>
+    upd('member', 'assignedToMember', { status: 'in_progress', rank: 'a2' }));
+  it('denies: a viewer reordering; allows: the same member once given "status"', async () => {
+    await grant('member', []);
+    await assertFails(upd('member', 'byOwner', { rank: 'a1' }));
+    await grant('member', ['status']);
+    await assertSucceeds(upd('member', 'byOwner', { rank: 'a1' }));
+  });
+  it('denies: "edit" alone does not allow reordering', async () => {
+    await grant('member', ['edit']);
+    await assertFails(upd('member', 'byOwner', { rank: 'a1' }));
+  });
+});
+
 describe('project chat (messages)', () => {
   const msgsCol = (db, pid = P) => collection(db, 'projects', pid, 'messages');
   const msgRef = (db, id, pid = P) => doc(db, 'projects', pid, 'messages', id);

@@ -17,10 +17,12 @@ export function ToastProvider({ children }) {
     const id = ++nextId.current;
     setToasts((list) => [...list, { ...toast, id }]);
     // Errors stay until dismissed so they can't be missed.
-    if (toast.tone !== 'error') setTimeout(() => dismiss(id), AUTO_DISMISS_MS);
+    if (toast.tone !== 'error') setTimeout(() => dismiss(id), toast.duration ?? AUTO_DISMISS_MS);
+    return id;
   }, [dismiss]);
 
-  const value = useMemo(() => ({ showToast }), [showToast]);
+  // showToast returns the toast's id; dismissToast(id) closes it early (e.g. after "Undo").
+  const value = useMemo(() => ({ showToast, dismissToast: dismiss }), [showToast, dismiss]);
   return (
     <ToastContext.Provider value={value}>
       {children}
