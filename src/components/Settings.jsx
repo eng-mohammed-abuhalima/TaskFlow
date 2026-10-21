@@ -1,10 +1,11 @@
-import { UserPlus, Trash2 } from 'lucide-react';
+import { UserPlus, Trash2, KeyRound, X } from 'lucide-react';
 import { cx } from '../lib/cx.js';
 import { TextField, Select, DateField } from './Field.jsx';
 import { Avatar } from './Avatar.jsx';
 import { Button } from './Button.jsx';
-import { MemberChip } from './Avatar.jsx';
 import { statusOptions, priorityOptions } from './Badges.jsx';
+import { PermissionsPicker, permsSummary } from './PermissionsPicker.jsx';
+import { DEFAULT_PERMS } from '../lib/permissions.js';
 
 // #region panel
 export const panelClasses = {
@@ -30,25 +31,57 @@ export function Panel({ title, description, tone, children, className }) {
   );
 }
 
-/** `members`: [{ uid, name }] without the owner; onRemove receives that member object. */
-export function MembersManager({ lang = 'en', owner, members = [], email = '', error, adding, onEmail, onAdd, onRemove }) {
+/**
+ * Members panel (owner only). `members`: [{ uid, name }] without the owner. Each member shows their
+ * permissions (`permsByUid[uid]`, default "contributor") with a button to change them (onEditPerms(member)).
+ * The add form picks the new member's permissions too (addPerms / onAddPerms).
+ * onRemove receives the member object.
+ */
+export function MembersManager({
+  lang = 'en', owner, members = [], email = '', error, adding, onEmail, onAdd, onRemove,
+  permsByUid = {}, addPerms = DEFAULT_PERMS, onAddPerms, onEditPerms,
+}) {
   const t = (en, ar) => (lang === 'ar' ? ar : en);
   return (
-    <Panel title={t('Members', 'الأعضاء')} description={t('Add teammates who already have a TaskFlow account.', 'أضف زملاء لديهم حساب في TaskFlow.')}>
-      <form className="flex flex-col gap-3 sm:flex-row sm:items-start" onSubmit={(e) => { e.preventDefault(); onAdd && onAdd(); }} noValidate>
-        <TextField className="flex-1" label={t('Email address', 'البريد الإلكتروني')} type="email" dir="ltr" placeholder="name@team.dev"
+    <Panel title={t('Members', 'الأعضاء')} description={t('Add teammates who already have a TaskFlow account, and choose what each one can do.', 'أضف زملاء لديهم حساب في TaskFlow، وحدّد ما يستطيع كل منهم فعله.')}>
+      <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); onAdd && onAdd(); }} noValidate>
+        <TextField label={t('Email address', 'البريد الإلكتروني')} type="email" dir="ltr" placeholder="name@team.dev"
           value={email} onChange={(e) => onEmail && onEmail(e.target.value)} error={error} autoComplete="off" />
-        <Button type="submit" icon={UserPlus} loading={adding} className="sm:mt-[calc(var(--text-label--line-height)+0.375rem)]">{t('Add member', 'إضافة عضو')}</Button>
+        <PermissionsPicker value={addPerms} onChange={(perms) => onAddPerms && onAddPerms(perms)} lang={lang} disabled={adding} name="perms-add" />
+        <Button type="submit" icon={UserPlus} loading={adding} className="self-start">{t('Add member', 'إضافة عضو')}</Button>
       </form>
-      <ul className="flex flex-wrap gap-2" aria-label={t('Current members', 'الأعضاء الحاليون')}>
-        <li><MemberChip name={owner} owner ownerLabel={t('Owner', 'المالك')} /></li>
+      <ul className={membersListClasses.list} aria-label={t('Current members', 'الأعضاء الحاليون')}>
+        <li className={membersListClasses.row}>
+          <Avatar name={owner} size="sm" />
+          <span className={membersListClasses.name}>{owner}</span>
+          <span className={membersListClasses.badge}>{t('Owner · everything', 'المالك · كل الصلاحيات')}</span>
+        </li>
         {members.map((m) => (
-          <li key={m.uid}><MemberChip name={m.name} onRemove={() => onRemove && onRemove(m)} removeLabel={t('Remove ' + m.name, 'إزالة ' + m.name)} /></li>
+          <li key={m.uid} className={membersListClasses.row}>
+            <Avatar name={m.name} size="sm" />
+            <span className={membersListClasses.name}>{m.name}</span>
+            <span className={membersListClasses.badge}>{permsSummary(permsByUid[m.uid] ?? DEFAULT_PERMS, lang)}</span>
+            <span className="ms-auto flex shrink-0 items-center gap-1">
+              <Button variant="ghost" size="sm" icon={KeyRound} onClick={() => onEditPerms && onEditPerms(m)}
+                aria-label={t('Permissions of ' + m.name, 'صلاحيات ' + m.name)}>
+                <span className="max-sm:sr-only">{t('Permissions', 'الصلاحيات')}</span>
+              </Button>
+              <Button variant="ghost" size="sm" iconOnly icon={X} className="hover:text-danger-fg"
+                aria-label={t('Remove ' + m.name, 'إزالة ' + m.name)} onClick={() => onRemove && onRemove(m)} />
+            </span>
+          </li>
         ))}
       </ul>
     </Panel>
   );
 }
+
+export const membersListClasses = {
+  list: 'flex flex-col overflow-hidden rounded-leaf-sm border border-subtle [&>li+li]:border-t [&>li+li]:border-subtle',
+  row: 'flex min-h-touch flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2',
+  name: 'user-text min-w-0 truncate text-body font-medium text-fg',
+  badge: 'inline-flex items-center rounded-pill bg-surface-sunken px-2 py-0.5 text-caption font-medium text-fg-muted',
+};
 
 export function DangerZone({ lang = 'en', projectName, onDelete }) {
   const t = (en, ar) => (lang === 'ar' ? ar : en);

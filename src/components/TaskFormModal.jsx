@@ -12,12 +12,15 @@ const NONE = 'none'; // Radix Select can't use an empty string as a value
 
 /**
  * Create / edit task dialog. `task` = null means create. Only the owner and the task's creator open it.
- * `showStatus`: the owner also changes the status here (edit only). The assignee uses StatusDialog
+ * `access` = { details, dueDate, assignee }: which parts this user may change (member permissions);
+ * the rest is shown but locked. `showStatus`: the owner also changes the status here (edit only). The assignee uses StatusDialog
  * (status + optional message) from the task row instead.
  * members: [{ uid, name }].
  * onSubmit(values) should throw on failure; the dialog then stays open with the values kept.
  */
-export function TaskFormModal({ open, task, members, showStatus = false, onSubmit, onClose }) {
+const FULL_ACCESS = { details: true, dueDate: true, assignee: true };
+
+export function TaskFormModal({ open, task, members, showStatus = false, access = FULL_ACCESS, onSubmit, onClose }) {
   const { t } = usePrefs();
   const editing = Boolean(task);
   return (
@@ -25,13 +28,14 @@ export function TaskFormModal({ open, task, members, showStatus = false, onSubmi
       closeLabel={t('Close', 'إغلاق')} className="max-w-lg">
       {/* Mounted only while open, keyed by task, so every opening starts from fresh values. */}
       {open && (
-        <TaskForm key={task?.id ?? 'new'} task={task} members={members} showStatus={showStatus} onSubmit={onSubmit} onCancel={onClose} />
+        <TaskForm key={task?.id ?? 'new'} task={task} members={members} showStatus={showStatus} access={task ? access : FULL_ACCESS}
+          onSubmit={onSubmit} onCancel={onClose} />
       )}
     </Modal>
   );
 }
 
-function TaskForm({ task, members, showStatus, onSubmit, onCancel }) {
+function TaskForm({ task, members, showStatus, access, onSubmit, onCancel }) {
   const { t, lang } = usePrefs();
   const editing = Boolean(task);
   const [values, setValues] = useState({
@@ -73,18 +77,18 @@ function TaskForm({ task, members, showStatus, onSubmit, onCancel }) {
     <form className="@container flex flex-col gap-4 text-start" noValidate onSubmit={handleSubmit}>
       <TextField label={t('Title', 'العنوان')} required autoFocus inputClassName="user-text"
         placeholder={t('e.g. Wire up the login form', 'مثال: ربط نموذج تسجيل الدخول')}
-        value={values.title} onChange={(e) => set('title')(e.target.value)} error={errors.title} disabled={saving}
+        value={values.title} onChange={(e) => set('title')(e.target.value)} error={errors.title} disabled={saving || !access.details}
         count={counter(values.title, TASK_TITLE.max)} />
       <TextField label={t('Description', 'الوصف')} multiline rows={3} inputClassName="user-text"
-        value={values.description} onChange={(e) => set('description')(e.target.value)} error={errors.description} disabled={saving}
+        value={values.description} onChange={(e) => set('description')(e.target.value)} error={errors.description} disabled={saving || !access.details}
         count={counter(values.description, DESCRIPTION_MAX)} />
       <div className="grid gap-4 @sm:grid-cols-2">
         {editing && showStatus && (
           <Select label={t('Status', 'الحالة')} options={statusOptions(lang)} value={values.status} onChange={set('status')} disabled={saving} />
         )}
-        <Select label={t('Priority', 'الأولوية')} options={priorityOptions(lang)} value={values.priority} onChange={set('priority')} disabled={saving} />
-        <DateField label={t('Due date', 'تاريخ الاستحقاق')} lang={lang} today={todayISO()} value={values.dueDate} onChange={set('dueDate')} />
-        <Select label={t('Assignee', 'المسؤول')} options={assigneeOptions} value={values.assigneeId} onChange={set('assigneeId')} disabled={saving} />
+        <Select label={t('Priority', 'الأولوية')} options={priorityOptions(lang)} value={values.priority} onChange={set('priority')} disabled={saving || !access.details} />
+        <DateField label={t('Due date', 'تاريخ الاستحقاق')} lang={lang} today={todayISO()} value={values.dueDate} onChange={set('dueDate')} disabled={saving || !access.dueDate} />
+        <Select label={t('Assignee', 'المسؤول')} options={assigneeOptions} value={values.assigneeId} onChange={set('assigneeId')} disabled={saving || !access.assignee} />
       </div>
       <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
         <Button variant="secondary" onClick={onCancel} disabled={saving}>{t('Cancel', 'إلغاء')}</Button>

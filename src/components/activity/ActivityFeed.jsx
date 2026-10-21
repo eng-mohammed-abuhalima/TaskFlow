@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  CirclePlus, Pencil, ArrowRightLeft, UserCheck, UserX, Trash2, Ban, UserPlus, UserMinus, LogOut, Settings2, History, CloudOff,
+  CirclePlus, Pencil, ArrowRightLeft, UserCheck, UserX, Trash2, Ban, UserPlus, UserMinus, LogOut, Settings2, History, CloudOff, KeyRound,
 } from 'lucide-react';
 import { Button } from '../Button.jsx';
 import { EmptyState, Loading, Skeleton } from '../States.jsx';
@@ -23,6 +23,7 @@ const KINDS = {
   member_removed: { icon: UserMinus, tone: 'bg-danger-soft text-danger-fg' },
   member_left: { icon: LogOut, tone: 'bg-warning-soft text-warning-fg' },
   project_updated: { icon: Settings2, tone: 'bg-surface-sunken text-fg-muted' },
+  member_perms: { icon: KeyRound, tone: 'bg-accent-soft text-fg-accent' },
 };
 const FALLBACK = { icon: History, tone: 'bg-surface-sunken text-fg-muted' };
 

@@ -70,12 +70,12 @@ export function updateProject(project, values, uid) {
 }
 
 /**
- * Firestore doesn't delete subcollections, so remove the activity log and the tasks first
+ * Firestore doesn't delete subcollections, so remove the activity log, the member permissions and the tasks first
  * (in batches), then the project. If a batch fails the project is kept and the delete can be retried.
  */
 export function deleteProject(id) {
   return guardedWrite(async () => {
-    for (const sub of ['activity', 'tasks']) {
+    for (const sub of ['activity', 'memberPerms', 'tasks']) {
       const docs = (await getDocs(collection(db, 'projects', id, sub))).docs;
       for (let i = 0; i < docs.length; i += BATCH_LIMIT) {
         const batch = writeBatch(db);

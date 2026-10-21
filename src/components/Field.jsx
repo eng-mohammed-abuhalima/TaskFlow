@@ -210,7 +210,7 @@ export function Calendar({ lang = 'en', selected, today, onSelect, className }) 
  * value/defaultValue/onChange use ISO "YYYY-MM-DD" strings (or null). Arabic: Arabic months,
  * Saturday-first weeks, Western digits, mirrored navigation.
  */
-export function DateField({ label, hint, error, required, value, defaultValue = null, onChange, lang = 'en', placeholder, className, today }) {
+export function DateField({ label, hint, error, required, value, defaultValue = null, onChange, lang = 'en', placeholder, className, today, disabled }) {
   const container = usePortalContainer();
   const [inner, setInner] = useState(defaultValue);
   const [open, setOpen] = useState(false);
@@ -226,7 +226,8 @@ export function DateField({ label, hint, error, required, value, defaultValue = 
       {(a11y) => (
         <Popover.Root open={open} onOpenChange={setOpen}>
           <Popover.Trigger {...a11y} onPointerDown={() => setQuiet(true)} onKeyDown={() => setQuiet(false)} onBlur={() => setChanged(false)}
-            data-changed={changed} data-quiet={quiet} className={cx(fieldClasses.control, dateClasses.trigger, dateClasses.changed, selectClasses.quiet)}>
+            data-changed={changed} data-quiet={quiet} disabled={disabled}
+            className={cx(fieldClasses.control, dateClasses.trigger, dateClasses.changed, selectClasses.quiet)}>
             {current ? <span className="min-w-0 truncate tabular-nums">{formatDate(current, lang, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
               : <span className={cx('min-w-0 truncate', dateClasses.placeholder)}>{placeholder || t('Pick a date', 'اختر تاريخًا')}</span>}
             <Icon icon={CalendarDays} className="text-fg-muted" />

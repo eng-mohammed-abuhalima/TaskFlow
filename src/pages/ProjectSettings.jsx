@@ -5,11 +5,15 @@ import { ProjectForm } from '../components/ProjectForm.jsx';
 import { ProjectStatusView } from '../components/ProjectStatusView.jsx';
 import { Panel, MembersManager, DangerZone } from '../components/Settings.jsx';
 import { ConfirmDialog } from '../components/Overlay.jsx';
+import { PermissionsDialog } from '../components/PermissionsPicker.jsx';
 import { FullPageLoading } from '../components/routing/FullPageLoading.jsx';
 import { usePrefs } from '../context/PreferencesContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useProject } from '../hooks/useProject.js';
+import { useProjectPerms } from '../hooks/usePerms.js';
+import { setMemberPerms } from '../services/perms.js';
+import { DEFAULT_PERMS } from '../lib/permissions.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { updateProject, deleteProject } from '../services/projects.js';
 import { addMemberByEmail, removeMember, MemberError, MAX_MEMBERS } from '../services/members.js';
@@ -26,6 +30,9 @@ export default function ProjectSettings() {
   const { status, project, isOwner, reload } = useProject(id);
   // Only for the owner's page; the loading / 403 / 404 views set their own title.
   usePageTitle(status === 'ready' && isOwner ? `${t('Settings', 'الإعدادات')} · ${project.name}` : null);
+  const perms = useProjectPerms(id, status === 'ready' && isOwner);
+  const [addPerms, setAddPerms] = useState(DEFAULT_PERMS);
+  const [editingPerms, setEditingPerms] = useState(null); // the member whose permissions are open
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [email, setEmail] = useState('');
@@ -67,8 +74,9 @@ export default function ProjectSettings() {
     if (invalid) return;
     setAdding(true);
     try {
-      const added = await addMemberByEmail(project, email, user.uid);
+      const added = await addMemberByEmail(project, email, user.uid, addPerms);
       setEmail('');
+      setAddPerms(DEFAULT_PERMS);
       showToast({ tone: 'success', title: t('Member added', 'تمت إضافة العضو'), message: added.displayName });
     } catch (err) {
       const messages = {
@@ -81,6 +89,17 @@ export default function ProjectSettings() {
         : writeErrorMessage(err, t, t('Couldn’t add the member. Check your connection and try again.', 'تعذّرت إضافة العضو. تحقق من الاتصال وحاول مجددًا.')));
     } finally {
       setAdding(false);
+    }
+  }
+
+  async function handleSavePerms(list) {
+    try {
+      await setMemberPerms(project, editingPerms.uid, list, user.uid);
+      showToast({ tone: 'success', title: t('Permissions saved', 'تم حفظ الصلاحيات'), message: editingPerms.name });
+      setEditingPerms(null);
+    } catch (err) {
+      failureToast(t('Couldn’t save the permissions', 'تعذّر حفظ الصلاحيات'), err);
+      throw err; // keeps the dialog open
     }
   }
 
@@ -139,6 +158,18 @@ export default function ProjectSettings() {
         onEmail={(value) => { setEmail(value); setEmailError(''); }}
         onAdd={handleAdd}
         onRemove={setToRemove}
+        permsByUid={perms.byUid}
+        addPerms={addPerms}
+        onAddPerms={setAddPerms}
+        onEditPerms={setEditingPerms}
+      />
+
+      <PermissionsDialog
+        member={editingPerms}
+        perms={editingPerms ? perms.byUid[editingPerms.uid] ?? DEFAULT_PERMS : DEFAULT_PERMS}
+        lang={lang}
+        onSave={handleSavePerms}
+        onClose={() => setEditingPerms(null)}
       />
 
       <DangerZone lang={lang} projectName={project.name} onDelete={() => setConfirming(true)} />

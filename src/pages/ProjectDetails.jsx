@@ -17,7 +17,9 @@ import { useProject } from '../hooks/useProject.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useTasks } from '../hooks/useTasks.js';
 import { createTask, updateTask, deleteTask } from '../services/tasks.js';
-import { canEditTaskDetails, canDeleteTask, isProjectOwner } from '../lib/permissions.js';
+import { canCreateTask, canEditTask, canDeleteTask, isProjectOwner, showsStatusButton, taskFieldAccess } from '../lib/permissions.js';
+import { useMyPerms } from '../hooks/usePerms.js';
+import { permsSummary } from '../components/PermissionsPicker.jsx';
 import { projectMembers } from '../lib/members.js';
 import { filterTasks, DEFAULT_FILTERS } from '../lib/filterTasks.js';
 import { writeErrorMessage } from '../lib/network.js';
@@ -41,6 +43,9 @@ function ProjectView({ project, isOwner }) {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const tasks = useTasks(project.id);
+  // What this member was allowed to do (the owner: everything). The rules enforce the same.
+  const perms = useMyPerms(project, user.uid);
+  const mayCreate = canCreateTask(project, user.uid, perms);
   const [form, setForm] = useState({ open: false, task: null });
   const [toDelete, setToDelete] = useState(null);
   const [statusFor, setStatusFor] = useState(null);
@@ -119,9 +124,11 @@ function ProjectView({ project, isOwner }) {
               {t('Settings', 'الإعدادات')}
             </Button>
           )}
-          <Button icon={Plus} className="flex-1 md:flex-none" onClick={() => setForm({ open: true, task: null })}>
-            {t('New task', 'مهمة جديدة')}
-          </Button>
+          {mayCreate && (
+            <Button icon={Plus} className="flex-1 md:flex-none" onClick={() => setForm({ open: true, task: null })}>
+              {t('New task', 'مهمة جديدة')}
+            </Button>
+          )}
         </div>
       </header>
 
@@ -134,6 +141,11 @@ function ProjectView({ project, isOwner }) {
             <li key={m.uid}><MemberChip name={m.name} owner={m.uid === project.ownerId} ownerLabel={t('Owner', 'المالك')} /></li>
           ))}
         </ul>
+        {!isOwner && (
+          <p className="text-body-sm text-fg-muted md:ms-auto">
+            {t('Your permissions: ', 'صلاحياتك: ')}<b className="font-medium text-fg">{permsSummary(perms, lang)}</b>
+          </p>
+        )}
       </section>
 
       {isOwner && (
@@ -166,7 +178,7 @@ function ProjectView({ project, isOwner }) {
         </EmptyState>
       ) : tasks.tasks.length === 0 ? (
         <EmptyState icon={ListChecks} title={t('No tasks yet', 'لا توجد مهام بعد')}
-          action={<Button icon={Plus} onClick={() => setForm({ open: true, task: null })}>{t('New task', 'مهمة جديدة')}</Button>}>
+          action={mayCreate ? <Button icon={Plus} onClick={() => setForm({ open: true, task: null })}>{t('New task', 'مهمة جديدة')}</Button> : null}>
           {t('Split the work into tasks with an owner and a due date.', 'قسّم العمل إلى مهام لكل منها مسؤول وموعد.')}
         </EmptyState>
       ) : (
@@ -196,9 +208,9 @@ function ProjectView({ project, isOwner }) {
                   task={{ ...task, due: task.dueDate, assignee: nameOf(task.assigneeId) }}
                   lang={lang}
                   today={today}
-                  canEdit={canEditTaskDetails(task, project, user.uid)}
-                  canDelete={canDeleteTask(task, project, user.uid)}
-                  canChangeStatus={task.assigneeId === user.uid}
+                  canEdit={canEditTask(task, project, user.uid, perms)}
+                  canDelete={canDeleteTask(task, project, user.uid, perms)}
+                  canChangeStatus={showsStatusButton(task, project, user.uid, perms)}
                   onChangeStatus={() => setStatusFor(task)}
                   onEdit={() => setForm({ open: true, task })}
                   onDelete={() => setToDelete(task)}
@@ -216,6 +228,7 @@ function ProjectView({ project, isOwner }) {
         task={form.task}
         members={members}
         showStatus={isProjectOwner(project, user.uid)}
+        access={form.task ? taskFieldAccess(form.task, project, user.uid, perms) : undefined}
         onSubmit={handleSubmit}
         onClose={() => setForm((f) => ({ ...f, open: false }))}
       />

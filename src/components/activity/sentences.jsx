@@ -1,5 +1,6 @@
 import { STATUS_LABELS } from '../Badges.jsx';
 import { formatDate, tr } from '../../lib/i18n.js';
+import { permsSummary } from '../PermissionsPicker.jsx';
 
 /*
   Turns stored activity entries and notifications (facts: type, names, ids) into sentences in the
@@ -11,6 +12,9 @@ const Name = ({ children }) => <bdi className="font-semibold text-fg">{children}
 const Title = ({ children, lang }) => (
   <>{lang === 'ar' ? '«' : '“'}<bdi className="font-medium text-fg">{children}</bdi>{lang === 'ar' ? '»' : '”'}</>
 );
+
+/** A permission set by its template name (Viewer, Contributor…) or “Custom (n)”. */
+const Perms = ({ perms, lang }) => <b className="font-medium text-fg">{permsSummary(perms ?? [], lang)}</b>;
 
 const FIELD_LABELS = {
   en: { title: 'title', description: 'description', priority: 'priority', dueDate: 'due date', name: 'name' },
@@ -48,7 +52,11 @@ export function ActivitySentence({ entry, lang }) {
     case 'task_declined':
       return t(<>{A} declined {T}</>, <>رفض {A} المهمة {T}</>);
     case 'member_added':
-      return t(<>{A} added {B} to the project</>, <>أضاف {A} {B} إلى المشروع</>);
+      return entry.perms
+        ? t(<>{A} added {B} to the project as <Perms perms={entry.perms} lang={lang} /></>, <>أضاف {A} {B} إلى المشروع بصلاحيات <Perms perms={entry.perms} lang={lang} /></>)
+        : t(<>{A} added {B} to the project</>, <>أضاف {A} {B} إلى المشروع</>);
+    case 'member_perms':
+      return t(<>{A} changed the permissions of {B} to <Perms perms={entry.perms} lang={lang} /></>, <>غيّر {A} صلاحيات {B} إلى <Perms perms={entry.perms} lang={lang} /></>);
     case 'member_removed':
       return t(<>{A} removed {B} from the project</>, <>أزال {A} {B} من المشروع</>);
     case 'member_left':
@@ -88,7 +96,11 @@ export function NotificationSentence({ note, lang }) {
     case 'task_declined':
       return t(<>{A} declined {T} in {P}</>, <>رفض {A} المهمة {T} في مشروع {P}</>);
     case 'member_added':
-      return t(<>{A} added you to {P}</>, <>أضافك {A} إلى مشروع {P}</>);
+      return note.perms
+        ? t(<>{A} added you to {P} as <Perms perms={note.perms} lang={lang} /></>, <>أضافك {A} إلى مشروع {P} بصلاحيات <Perms perms={note.perms} lang={lang} /></>)
+        : t(<>{A} added you to {P}</>, <>أضافك {A} إلى مشروع {P}</>);
+    case 'perms_changed':
+      return t(<>{A} changed your permissions in {P} to <Perms perms={note.perms} lang={lang} /></>, <>غيّر {A} صلاحياتك في مشروع {P} إلى <Perms perms={note.perms} lang={lang} /></>);
     case 'member_left':
       return t(<>{A} declined and left {P}</>, <>اعتذر {A} عن مشروع {P} وغادره</>);
     default:
