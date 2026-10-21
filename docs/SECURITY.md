@@ -11,12 +11,15 @@ permission in the UI (`src/lib/permissions.js`) is a mirror of a rule.
 | Own profile (`users/{uid}`) | no | read / rename own | read / rename own | read / rename own |
 | Email lookup (`userEmails/{email}`) | no | `get` one (never list) | `get` one | `get` one |
 | Project | no | no (404 vs 403 is distinguishable, no data) | read | read, edit name/description, delete |
-| Members | no | no | read names; **leave** (remove only themselves) | add one existing user by email, remove one (not the owner), max 20 |
+| Members | no | no | read names; **leave** (remove only themselves) | add one existing user by email (with permissions), remove one (not the owner), max 20 |
+| Member permissions (`projects/{id}/memberPerms/{uid}`) | no | no | read **their own** | set any member's (never the owner's), list, delete |
 | Tasks: read | no | no | yes | yes |
-| Tasks: create | no | no | yes (credited to self, starts as `todo`) | yes |
-| Tasks: edit details | no | no | only ones they created (a task they are **only assigned to**: status update or taking themselves off it, nothing else) | any |
-| Tasks: change status | no | no | only on tasks assigned to them, and **the owner must be notified in the same write** | any (no notification required) |
-| Tasks: delete | no | no | only ones they created | any |
+| Tasks: create | no | no | with `create` (the default; credited to self, starts as `todo`) | yes |
+| Tasks: title, description, priority | no | no | ones they created; any with `edit` | any |
+| Tasks: due date | no | no | ones they created; any with `dueDate` | any |
+| Tasks: assignee | no | no | ones they created; any with `assign`; on a task assigned to them, only taking themselves off | any |
+| Tasks: change status | no | no | tasks assigned to them; any with `status`; **the owner must be notified in the same write** | any (no notification required) |
+| Tasks: delete | no | no | ones they created; any with `delete` | any |
 | Activity log (`projects/{id}/activity`) | no | no | write entries for their own changes; **can't read** | read; delete (used when deleting the project) |
 | Notifications (`users/{uid}/notifications`) | no | no | send one only as part of the change it reports; read / mark read / decline / delete **their own** | same |
 
@@ -53,6 +56,15 @@ collection-group queries over all tasks.
   never to themselves, with `read: false`, and only alongside the change it reports (e.g. "assigned to you"
   needs the task's `assigneeId` to become the recipient in the same batch). Only the recipient can read it.
   They can mark it read, answer "declined" **once** (only on an assignment or an invitation), or delete it.
+- **Per-member permissions, granted by the owner**: six permissions (`create`, `edit`, `dueDate`, `assign`,
+  `status`, `delete`), each working on **any** task of the project, and offered as templates: Viewer (none),
+  Contributor (`create`, the default: exactly the SRS member) and Task manager (all six), or Custom. They live in
+  one document per member (`memberPerms/{uid}`), because rules can check a document but can't loop over a map to
+  find which member changed. Only the owner writes them, only for someone who is (or becomes, in the same batch)
+  a member, never for the owner; a member reads only their own. A member **with no document is a Contributor**,
+  so older members keep working. The task rules check each changed field group against its permission; the owner
+  bypasses them all. Permissions left behind when someone leaves give nothing (every check also needs membership).
+  Changing them is logged and the member is notified, and the rules check both match what was saved.
 - **Assignees update, creators edit** (stricter than the SRS matrix, on purpose): the SRS lets a member edit tasks
   they created *or are assigned to*. Here someone who is only the assignee can change the status (with its update)
   or set `assigneeId` to `null` on themselves (declining / leaving), and nothing else: title, description, priority,
@@ -109,7 +121,7 @@ refuses older versions and prints an error). The first run downloads the emulato
 
 ## Test results
 
-**Automated (`npm run test:rules`): 224 tests in 16 groups, 224 pass.** Every group tests what must be
+**Automated (`npm run test:rules`): 249 tests in 19 groups, 249 pass.** Every group tests what must be
 *allowed* and what must be *denied*, for the owner, a member, an outsider and a signed-out visitor:
 
 | Group | What it covers |
@@ -129,15 +141,19 @@ refuses older versions and prints an error). The first run downloads the emulato
 | Activity log | each entry must match the change in its batch (created / status / assigned / deleted / member added / left…), actor and name can't be forged, no extra fields, owner-only reads, no edits |
 | Notifications | only alongside the change they report, never to yourself, arrive unread, recipient-only reads, read / decline once, the decline must answer a real assignment from that person, the full decline and leave batches |
 | Status updates must tell the owner | a non-owner status change needs a new owner notification for that task from that user; telling the owner doesn't let a non-assignee change the status; the owner needs none |
+| Member permissions: who sets them | owner only, only for members (or someone added in the same batch), never for the owner, valid names only, no duplicates or extra fields; members read only their own |
+| Member permissions: what they allow | a viewer can't create; each of `create` / `edit` / `dueDate` / `assign` / `status` / `delete` unlocks exactly its own change on any task; creators keep their own tasks, assignees keep status updates; left-behind permissions give nothing |
+| Member permissions: log and notifications | the entry and the note must match the permissions saved in the same batch |
 | Everything else | unknown collections and subcollections are closed |
 
-**The tests themselves are tested** (`npm run test:rules:mutations`): the rules are broken on purpose in 17
+**The tests themselves are tested** (`npm run test:rules:mutations`): the rules are broken on purpose in 20
 ways (a member can edit the project, anyone can change a status, emails can be listed, names can be
 forged, any month is accepted, `createdBy` can be changed, a member can delete any task, an outsider can
 read tasks, an unverified email can take over a lookup, a member can read the activity log, log entries need not match a
 real change, anyone can be sent any notification, a decline can be sent to anyone, "leaving" can remove other
-members, a status change need not tell the owner, a status update can go to an outsider, an assignee can edit the whole task) and the suite must
-fail each time. **All 17 are caught.** Twice a run showed a break slipping through ("leaving" can remove others; and
+members, a status change need not tell the owner, a status update can go to an outsider, anyone can edit task details, due dates ignore permissions,
+creating tasks ignores permissions, a member can grant themselves permissions) and the suite must fail each time.
+**All 20 are caught.** Twice a run showed a break slipping through ("leaving" can remove others; and
 "anyone can change a status" once the owner-notification rule made the old tests fail for a different reason),
 so a test aimed at exactly that rule was added each time, each by the tests named after that
 behaviour (1 to 5 failing tests per break), so a passing run isn't just tests that can't fail.

@@ -61,7 +61,7 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 
 - Owner: everything in the project.
 - Member: read project + tasks; create tasks (createdBy = self); edit tasks they created (on tasks they are ONLY
-  assigned to: status update or unassigning themselves, nothing else; stricter than the SRS, Mohammed's choice);
+  assigned to: status update or unassigning themselves); the owner can grant more per member (Member permissions);
   delete only tasks they created; change status only on tasks assigned to them.
 - Only the owner edits/deletes the project and manages members. Removing a member revokes access and
   unassigns their tasks. Deleting a project must delete its tasks subcollection (Firestore won't) or be blocked.
@@ -105,7 +105,7 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 - Phase 6 done: `lib/filterTasks.js` (pure, AND-combined filters incl. overdue) + `FilterBar` on the project page;
   real dashboard (`useDashboard` loads projects + their tasks, `lib/taskStats.js` aggregates client-side,
   `components/dashboard/{StatusBreakdown,OverdueList}`). FilterBar members are `[{ uid, name }]`.
-- Phase 7 done: hardened rules + emulator tests (224 after the assignee limit; 17 mutations) (`npm run test:rules`, needs Java 21+; `tests/rules.test.js`), a
+- Phase 7 done: hardened rules + emulator tests (249 after member permissions; 20 mutations) (`npm run test:rules`, needs Java 21+; `tests/rules.test.js`), a
   mutation check that proves the tests catch broken rules (`npm run test:rules:mutations`), `docs/SECURITY.md`.
   Rule names written into `projects.members` must equal the user's own `users/{uid}.displayName`.
 - Phase 8 done: offline = refuse to save with a clear error (`lib/network.js` `guardedWrite`, wrap every Firestore
@@ -128,6 +128,10 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
   Navbar) + decline with reason (task: unassign + tell the assigner; project: leave + tell the owner). Every entry
   and notification goes in the SAME writeBatch as its change; rules check it with get/getAfter. Services take
   `(project, …, uid)`: createTask/updateTask/deleteTask, addMemberByEmail, removeMember, updateProject.
+  Member permissions: `projects/{id}/memberPerms/{uid}` = { perms, updatedAt }, perms ⊆ create/edit/dueDate/assign/
+  status/delete (each on ANY task). Templates viewer/contributor/manager/custom (`lib/permissions.js` PRESETS). No doc =
+  contributor (['create']); creators always manage their own tasks; assignees always update status. Owner sets them in
+  Settings (PermissionsPicker when adding, PermissionsDialog per member); `useMyPerms` drives the project page.
   Status updates: the status pill in each task row is a button for the ASSIGNEE only, opening `StatusDialog` (status,
   optional message ≤300, who to notify). The owner changes status from the edit form (Status field, assignee told
   automatically, no message). The edit form only opens for owner/creator. A non-owner
