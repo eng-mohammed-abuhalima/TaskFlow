@@ -7,17 +7,18 @@ import { Button } from './Button.jsx';
 import { isOverdue } from '../lib/i18n.js';
 
 // #region classes
-export const taskListClasses = 'overflow-hidden rounded-leaf border border-subtle bg-surface shadow-card [&>li+li]:border-t [&>li+li]:border-subtle';
+// @container: a row lays out by the width of the list, not the screen (the chat column can narrow it).
+export const taskListClasses = '@container overflow-hidden rounded-leaf border border-subtle bg-surface shadow-card [&>li+li]:border-t [&>li+li]:border-subtle';
 export const taskRowClasses = {
   root:
     'group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2.5 px-4 py-3.5 transition-colors duration-fast ease-flow hover:bg-surface-hover ' +
-    'lg:grid-cols-[minmax(0,1fr)_9rem_6.5rem_8.5rem_7.5rem_auto] lg:items-center lg:gap-4 motion-reduce:transition-none',
+    '@min-[56rem]:grid-cols-[minmax(0,1fr)_9rem_6.5rem_8.5rem_7.5rem_auto] @min-[56rem]:items-center @min-[56rem]:gap-4 motion-reduce:transition-none',
   title: 'user-text break-words text-body font-medium text-fg',
   titleDone: 'text-fg-muted',
   desc: 'user-text mt-0.5 line-clamp-1 text-body-sm text-fg-muted',
-  meta: 'col-span-2 flex flex-wrap items-center gap-x-3 gap-y-2 lg:contents',
+  meta: 'col-span-2 flex flex-wrap items-center gap-x-3 gap-y-2 @min-[56rem]:contents',
   assignee: 'inline-flex min-w-0 items-center gap-2 text-body-sm text-fg-muted',
-  actions: 'col-start-2 row-start-1 flex items-center gap-0.5 lg:col-start-auto lg:row-start-auto',
+  actions: 'col-start-2 row-start-1 flex items-center gap-0.5 @min-[56rem]:col-start-auto @min-[56rem]:row-start-auto',
   // The status pill doubles as the "change status" button for those allowed to change it.
   statusButton:
     'inline-flex items-center gap-0.5 rounded-pill pe-1 text-fg-muted transition-colors duration-fast hover:bg-surface-hover hover:text-fg ' +
