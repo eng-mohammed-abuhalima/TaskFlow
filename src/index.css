@@ -546,6 +546,16 @@
     color-scheme: dark;
   }
 
+  /* While any dialog is open the page behind it doesn't scroll (the dialog itself still does).
+     The gutter is always reserved, so hiding the scrollbar never makes the page jump sideways. */
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  html:has(dialog[open]) {
+    overflow: hidden;
+  }
+
   [data-theme] {
     color: var(--fg);
   }
