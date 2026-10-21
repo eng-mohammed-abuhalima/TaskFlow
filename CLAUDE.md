@@ -105,7 +105,7 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 - Phase 6 done: `lib/filterTasks.js` (pure, AND-combined filters incl. overdue) + `FilterBar` on the project page;
   real dashboard (`useDashboard` loads projects + their tasks, `lib/taskStats.js` aggregates client-side,
   `components/dashboard/{StatusBreakdown,OverdueList}`). FilterBar members are `[{ uid, name }]`.
-- Phase 7 done: hardened rules + emulator tests (249 after member permissions; 20 mutations) (`npm run test:rules`, needs Java 21+; `tests/rules.test.js`), a
+- Phase 7 done: hardened rules + emulator tests (281 after project chat; 24 mutations) (`npm run test:rules`, needs Java 21+; `tests/rules.test.js`), a
   mutation check that proves the tests catch broken rules (`npm run test:rules:mutations`), `docs/SECURITY.md`.
   Rule names written into `projects.members` must equal the user's own `users/{uid}.displayName`.
 - Phase 8 done: offline = refuse to save with a clear error (`lib/network.js` `guardedWrite`, wrap every Firestore
@@ -138,6 +138,12 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
   MUST notify the owner (task stores `statusNoteId`, rules check it with existsAfter). `task_done` notes are replaced
   by `task_status`. Notes have `status`/`message` keys, log entries a `message` key: deploy rules and hosting together
   (`npm run deploy:all`), older app builds can't write the new shape.
+- Project chat (added on 2026-10-21): `projects/{id}/messages` = { text ≤1000, authorId, authorName (= members[uid].displayName),
+  createdAt } (no edits; author or owner deletes) and `projects/{id}/chatReads/{uid}` = { readAt } (every member reads all,
+  each writes their own; drives the unread badge and ✓/✓✓ "seen"). `services/chat.js`, `useChat` (owned by the project page),
+  `components/chat/{ProjectChat,MessageList}`: floating `ChatLauncher`, sticky column on xl+, `<dialog>` sheet below.
+  Task rows lay out by the list's width (container query at 56rem), not the screen. `deleteProject` also clears both.
+  New rules take about a minute to reach every server after a deploy (early writes can be denied).
 - Next: phase 10 (delivery). Order: (1) demo script + code-review Q&A prep (explain the Overdue filter:
   `dueDate < today && status !== 'done'`, today = `todayISO()` in Asia/Hebron), (2) 5-8 screenshots in
   `docs/screenshots/` taken by Mohammed in his own browser from the live URL, (3) README LAST (Mohammed's choice):
