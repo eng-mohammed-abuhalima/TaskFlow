@@ -27,6 +27,10 @@ import { formatNumber, todayISO } from '../lib/i18n.js';
 import { MemberChip } from '../components/Avatar.jsx';
 import { Tabs, TabPanel } from '../components/Tabs.jsx';
 import { ActivityFeed } from '../components/activity/ActivityFeed.jsx';
+import { ChatLauncher, ProjectChat } from '../components/chat/ProjectChat.jsx';
+import { useChat } from '../hooks/useChat.js';
+import { useMediaQuery } from '../lib/useMediaQuery.js';
+import { cx } from '../lib/cx.js';
 
 export default function ProjectDetails() {
   const { id } = useParams();
@@ -54,6 +58,10 @@ function ProjectView({ project, isOwner }) {
   // Only the owner has the Activity tab (the rules let only the owner read the log).
   const [tab, setTab] = useState('tasks');
   const showing = isOwner ? tab : 'tasks';
+  // Chat: a column beside the tasks on xl+ screens, a sheet over the page below that.
+  const [chatOpen, setChatOpen] = useState(false);
+  const chat = useChat(project, user.uid, chatOpen);
+  const wideChat = useMediaQuery('(min-width: 80rem)');
 
   const members = projectMembers(project, t('Member', 'عضو'));
   const nameOf = (uid) => members.find((m) => m.uid === uid)?.name ?? (uid ? t('Former member', 'عضو سابق') : null);
@@ -111,7 +119,9 @@ function ProjectView({ project, isOwner }) {
   }
 
   return (
-    <div className="mx-auto flex max-w-page flex-col gap-6 px-4 py-6 md:px-6 md:py-8 lg:px-8">
+    // With the chat column open the page grows by its width, so the task list keeps its usual size where there's room.
+    <div className={cx('mx-auto px-4 py-6 md:px-6 md:py-8 lg:px-8', chatOpen && wideChat ? 'grid max-w-[105.5rem] grid-cols-[minmax(0,1fr)_24rem] items-start gap-6' : 'max-w-page')}>
+    <div className="flex min-w-0 flex-col gap-6">
       <Breadcrumb items={[{ label: t('Dashboard', 'لوحة التحكم'), to: '/dashboard' }, { label: project.name }]} />
       <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0 max-w-2xl">
@@ -255,6 +265,21 @@ function ProjectView({ project, isOwner }) {
         {toDelete && t(`“${toDelete.title}” will be removed for every member. This can’t be undone.`,
           `ستُحذف «${toDelete.title}» لدى كل الأعضاء. لا يمكن التراجع عن ذلك.`)}
       </ConfirmDialog>
+    </div>
+
+    <ProjectChat
+      open={chatOpen}
+      wide={wideChat}
+      onClose={() => setChatOpen(false)}
+      chat={chat}
+      project={project}
+      uid={user.uid}
+      isOwner={isOwner}
+      members={members}
+      t={t}
+      lang={lang}
+    />
+    {!chatOpen && <ChatLauncher unread={chat.unread} onOpen={() => setChatOpen(true)} t={t} lang={lang} />}
     </div>
   );
 }

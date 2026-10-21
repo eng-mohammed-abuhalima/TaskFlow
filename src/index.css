@@ -362,6 +362,55 @@
     }
   }
 
+  /* Chat launcher: pops in with a little overshoot, then floats (bobs and tilts) forever.
+     Reduced motion: the global rule below runs each animation once, instantly, so it just sits still. */
+  --animate-chat-launcher: chat-pop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both, chat-float 4.2s ease-in-out 520ms infinite;
+  --animate-chat-ping: chat-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  /* Chat panel slides in from the end edge (the distance flips in RTL, see --chat-from). */
+  --animate-chat-in: chat-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-chat-message: toast-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  @keyframes chat-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.4) rotate(-20deg);
+    }
+  }
+
+  @keyframes chat-float {
+    0%,
+    100% {
+      transform: translateY(0) rotate(0);
+    }
+
+    25% {
+      transform: translateY(-4px) rotate(-5deg);
+    }
+
+    50% {
+      transform: translateY(-8px) rotate(0);
+    }
+
+    75% {
+      transform: translateY(-4px) rotate(5deg);
+    }
+  }
+
+  @keyframes chat-ping {
+    75%,
+    100% {
+      transform: scale(1.7);
+      opacity: 0;
+    }
+  }
+
+  @keyframes chat-in {
+    from {
+      opacity: 0;
+      transform: translateX(var(--chat-from));
+    }
+  }
+
   --font-sans: "IBM Plex Sans Variable",
   "IBM Plex Sans Arabic",
   system-ui,
@@ -627,4 +676,12 @@
 :lang(ar),
 :lang(ar) * {
   letter-spacing: 0 !important;
+}
+/* Where the chat panel slides in from: the end edge (right in English, left in Arabic). */
+:root {
+  --chat-from: 1.5rem;
+}
+
+[dir="rtl"] {
+  --chat-from: -1.5rem;
 }
