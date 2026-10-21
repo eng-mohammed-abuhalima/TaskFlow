@@ -75,7 +75,7 @@ export function updateProject(project, values, uid) {
  */
 export function deleteProject(id) {
   return guardedWrite(async () => {
-    for (const sub of ['activity', 'memberPerms', 'tasks']) {
+    for (const sub of ['activity', 'memberPerms', 'messages', 'chatReads', 'tasks']) {
       const docs = (await getDocs(collection(db, 'projects', id, sub))).docs;
       for (let i = 0; i < docs.length; i += BATCH_LIMIT) {
         const batch = writeBatch(db);
