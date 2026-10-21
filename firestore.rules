@@ -464,14 +464,17 @@ service cloud.firestore {
             && (data.assigneeId == null || data.assigneeId in project().memberIds)
             // YYYY-MM-DD with a real month (01-12) and day (01-31). Short months aren't checked here.
             && (data.dueDate == null || (data.dueDate is string
-                && data.dueDate.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')));
+                && data.dueDate.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')))
+            // Board order (fractional index, compared as text). Optional: older tasks have none.
+            && (!('rank' in data) || (data.rank is string && data.rank.matches('^[0-9A-Za-z]{1,64}$')));
         }
         function requiredTaskKeys() {
           return ['title', 'description', 'status', 'priority', 'assigneeId', 'dueDate', 'createdBy', 'createdAt', 'updatedAt'];
         }
-        // statusNoteId: id of the owner's notification for the latest status change (optional field).
+        // Optional fields: statusNoteId (id of the owner's notification for the latest status change)
+        // and rank (position on the board).
         function taskKeys() {
-          return requiredTaskKeys().concat(['statusNoteId']);
+          return requiredTaskKeys().concat(['statusNoteId', 'rank']);
         }
         // The member's permissions (projects/{id}/memberPerms/{uid}). No document = "contributor": they may
         // create tasks, and as the creator they manage those tasks (exactly the SRS member).
@@ -527,6 +530,7 @@ service cloud.firestore {
         //  - due date: owner, creator, or "dueDate"
         //  - assignee: owner, creator, or "assign"; the assignee may only take themselves off
         //  - status: owner, the CURRENT assignee, or "status" (plus the owner's notification, below)
+        //  - rank: the same people as status, without a notification
         allow update: if inProject()
           && request.resource.data.keys().hasOnly(taskKeys())
           && validTask(request.resource.data)
@@ -537,7 +541,9 @@ service cloud.firestore {
           && mayChange(['dueDate'], 'dueDate')
           && (mayChange(['assigneeId'], 'assign') || (isAssignee() && request.resource.data.assigneeId == null))
           && (!changed().hasAny(['status']) || ownsProject() || isAssignee() || can('status'))
-          && (!changed().hasAny(['status']) || ownsProject() || ownerNotified());
+          && (!changed().hasAny(['status']) || ownsProject() || ownerNotified())
+          // Reordering on the board: whoever may move the task between columns (no notification needed).
+          && (!changed().hasAny(['rank']) || ownsProject() || isAssignee() || can('status'));
 
         // Owner, creator, or a member allowed to delete tasks.
         allow delete: if ownsProject() || (inProject() && isCreator()) || can('delete');
