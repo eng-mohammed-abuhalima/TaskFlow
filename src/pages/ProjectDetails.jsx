@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Settings, Plus, ListChecks, CloudOff, SearchX, History } from 'lucide-react';
+import { Settings, Plus, ListChecks, CloudOff, SearchX, History, List, SquareKanban } from 'lucide-react';
 import { Button } from '../components/Button.jsx';
 import { Breadcrumb } from '../components/Breadcrumb.jsx';
-import { EmptyState, Loading, SkeletonTaskRow } from '../components/States.jsx';
+import { EmptyState, Loading, Skeleton, SkeletonTaskRow } from '../components/States.jsx';
 import { TaskRow, taskListClasses } from '../components/Task.jsx';
 import { TaskFormModal } from '../components/TaskFormModal.jsx';
 import { StatusDialog } from '../components/StatusDialog.jsx';
@@ -17,7 +17,7 @@ import { useProject } from '../hooks/useProject.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useTasks } from '../hooks/useTasks.js';
 import { createTask, updateTask, deleteTask } from '../services/tasks.js';
-import { canCreateTask, canEditTask, canDeleteTask, isProjectOwner, showsStatusButton, taskFieldAccess } from '../lib/permissions.js';
+import { canCreateTask, canEditTask, canDeleteTask, canChangeStatus, isProjectOwner, showsStatusButton, taskFieldAccess } from '../lib/permissions.js';
 import { useMyPerms } from '../hooks/usePerms.js';
 import { permsSummary } from '../components/PermissionsPicker.jsx';
 import { projectMembers } from '../lib/members.js';
@@ -31,6 +31,21 @@ import { ChatLauncher, ProjectChat } from '../components/chat/ProjectChat.jsx';
 import { useChat } from '../hooks/useChat.js';
 import { useMediaQuery } from '../lib/useMediaQuery.js';
 import { cx } from '../lib/cx.js';
+import { Icon } from '../lib/icons.jsx';
+import { STATUS_LABELS } from '../components/Badges.jsx';
+import { groupByStatus, rankAtEnd } from '../lib/rank.js';
+
+// The board (and its drag-and-drop library) loads only when someone opens it.
+const TaskBoard = lazy(() => import('../components/board/TaskBoard.jsx'));
+
+// List or board, remembered per browser (a convenience: it falls back to the list).
+const VIEW_KEY = 'tf-task-view';
+function readView() {
+  try { return localStorage.getItem(VIEW_KEY) === 'board' ? 'board' : 'list'; } catch { return 'list'; }
+}
+function saveView(view) {
+  try { localStorage.setItem(VIEW_KEY, view); } catch { /* private mode: not remembered */ }
+}
 
 export default function ProjectDetails() {
   const { id } = useParams();
@@ -44,7 +59,7 @@ function ProjectView({ project, isOwner }) {
   const { t, lang } = usePrefs();
   usePageTitle(project.name);
   const { user } = useAuth();
-  const { showToast } = useToast();
+  const { showToast, dismissToast } = useToast();
   const navigate = useNavigate();
   const tasks = useTasks(project.id);
   // What this member was allowed to do (the owner: everything). The rules enforce the same.
@@ -55,6 +70,8 @@ function ProjectView({ project, isOwner }) {
   const [statusFor, setStatusFor] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [view, setViewState] = useState(readView);
+  const setView = (next) => { setViewState(next); saveView(next); };
   // Only the owner has the Activity tab (the rules let only the owner read the log).
   const [tab, setTab] = useState('tasks');
   const showing = isOwner ? tab : 'tasks';
@@ -81,7 +98,8 @@ function ProjectView({ project, isOwner }) {
         await updateTask(project, form.task, values, user.uid, statusChanged ? { recipients: [form.task.assigneeId].filter(Boolean) } : {});
         showToast({ tone: 'success', title: t('Task updated', 'تم تحديث المهمة') });
       } else {
-        await createTask(project, values, user.uid);
+        // New tasks go to the bottom of "To Do" on the board.
+        await createTask(project, { ...values, rank: rankAtEnd(groupByStatus(tasks.tasks).todo) }, user.uid);
         showToast({ tone: 'success', title: t('Task created', 'تم إنشاء المهمة') });
       }
       setForm({ open: false, task: form.task });
@@ -102,6 +120,36 @@ function ProjectView({ project, isOwner }) {
       saveFailed(err);
       throw err; // keeps the dialog open with the values
     }
+  }
+
+  /**
+   * A move on the board: a new place (rank), maybe in another column (status). A status change is logged
+   * and the owner told, like any other; the owner's own moves tell the assignee. Offers Undo for 5 seconds.
+   */
+  async function handleMove(task, { status, rank }, undoing = false) {
+    const statusChanged = status !== task.status;
+    const tell = statusChanged && isOwner ? { recipients: [task.assigneeId].filter(Boolean) } : {};
+    try {
+      await updateTask(project, task, { ...task, status, rank }, user.uid, tell);
+    } catch (err) {
+      showToast({ tone: 'error', title: t('Couldn’t move the task', 'تعذّر نقل المهمة'), message: writeErrorMessage(err, t) });
+      throw err; // the board puts the card back
+    }
+    if (!statusChanged || undoing) return;
+    const moved = { ...task, status, rank };
+    const id = showToast({
+      tone: 'success',
+      title: t(`Moved to ${STATUS_LABELS.en[status]}`, `نُقلت إلى «${STATUS_LABELS.ar[status]}»`),
+      message: task.title,
+      action: (
+        <Button size="sm" variant="secondary" onClick={() => {
+          dismissToast(id);
+          handleMove(moved, { status: task.status, rank: task.rank ?? rank }, true).catch(() => {});
+        }}>
+          {t('Undo', 'تراجع')}
+        </Button>
+      ),
+    });
   }
 
   async function handleDelete() {
@@ -193,6 +241,9 @@ function ProjectView({ project, isOwner }) {
         </EmptyState>
       ) : (
         <>
+          <div className="flex justify-end">
+            <ViewSwitch view={view} onChange={setView} t={t} />
+          </div>
           <FilterBar
             lang={lang}
             query={filters.q} onQuery={(q) => setFilter({ q })}
@@ -210,6 +261,25 @@ function ProjectView({ project, isOwner }) {
               action={<Button variant="secondary" onClick={clearFilters}>{t('Clear filters', 'مسح المرشحات')}</Button>}>
               {t('Try a different keyword or clear a filter.', 'جرّب كلمة أخرى أو امسح أحد المرشحات.')}
             </EmptyState>
+          ) : view === 'board' ? (
+            <Suspense fallback={<BoardSkeleton label={t('Loading the board…', 'جارٍ تحميل اللوحة…')} />}>
+              <TaskBoard
+                projectId={project.id}
+                tasks={visible}
+                allTasks={tasks.tasks}
+                isOwner={isOwner}
+                canMove={(task) => canChangeStatus(task, project, user.uid, perms)}
+                canEdit={(task) => canEditTask(task, project, user.uid, perms)}
+                canDelete={(task) => canDeleteTask(task, project, user.uid, perms)}
+                nameOf={nameOf}
+                onMove={handleMove}
+                onEdit={(task) => setForm({ open: true, task })}
+                onDelete={setToDelete}
+                lang={lang}
+                t={t}
+                today={today}
+              />
+            </Suspense>
           ) : (
             <ul className={taskListClasses} aria-label={t('Tasks', 'المهام')}>
               {visible.map((task) => (
@@ -281,5 +351,37 @@ function ProjectView({ project, isOwner }) {
     />
     {!chatOpen && <ChatLauncher unread={chat.unread} onOpen={() => setChatOpen(true)} t={t} lang={lang} />}
     </div>
+  );
+}
+
+/** List / Board toggle (two pressed-state buttons). */
+function ViewSwitch({ view, onChange, t }) {
+  const options = [
+    { id: 'list', icon: List, label: t('List', 'قائمة') },
+    { id: 'board', icon: SquareKanban, label: t('Board', 'لوحة') },
+  ];
+  return (
+    <div role="group" aria-label={t('Task view', 'عرض المهام')} className="inline-flex gap-0.5 rounded-control border border-subtle bg-surface p-0.5 shadow-card">
+      {options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          aria-pressed={view === o.id}
+          onClick={() => onChange(o.id)}
+          className="inline-flex h-9 items-center gap-1.5 rounded-leaf-sm px-3 text-label font-medium text-fg-muted transition-colors duration-fast hover:text-fg focus-ring aria-pressed:bg-primary-soft aria-pressed:text-fg-primary motion-reduce:transition-none"
+        >
+          <Icon icon={o.icon} size={16} />
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function BoardSkeleton({ label }) {
+  return (
+    <Loading label={label} className="grid gap-3 md:grid-cols-3">
+      {[0, 1, 2].map((i) => <Skeleton key={i} className="h-64 rounded-leaf" />)}
+    </Loading>
   );
 }
