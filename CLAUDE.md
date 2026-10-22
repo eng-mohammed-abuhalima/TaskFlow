@@ -158,6 +158,11 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
   how it works, tour, who it's for (`Teams`), why (`Why`, without vs with), FAQ, CTA. Feature and role cards show one
   at a time in `Rotator` (JS timer, pauses on hover/focus, pause button, starts stopped under reduced motion).
   Hero has one floating card only (the notification); the Arabic headline has its own mask/underline offsets.
+- Promo video + README (added on 2026-10-22): `video/` is a separate Remotion project (own package.json, ignored by the
+  app's ESLint): 30 s, 1080p, `TaskFlowAr` / `TaskFlowEn`, screenshots via `npm run capture` (Edge + Playwright, Mohammed
+  signs in with email/password; Google blocks automated browsers). README is written (English, no demo accounts): media
+  in `docs/media/demo.gif` and `docs/screenshots/`; the inline video players are uploaded by Mohammed in the GitHub editor
+  (`video/out/github/*.mp4`, under 10 MB) at the HTML comments in "Watch the 30-second tour".
 - Next: phase 10 (delivery). Order: (1) demo script + code-review Q&A prep (explain the Overdue filter:
   `dueDate < today && status !== 'done'`, today = `todayISO()` in Asia/Hebron), (2) 5-8 screenshots in
   `docs/screenshots/` taken by Mohammed in his own browser from the live URL, (3) README LAST (Mohammed's choice):
