@@ -38,7 +38,7 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
 
 ## Pages (routes)
 
-1. `/` — redirect: signed in → /dashboard, else → /login
+1. `/` — signed in → /dashboard; visitors see the landing page (`pages/Landing.jsx`, lazy-loaded)
 2. `/register` — name, email, password; creates Auth user + `users/{uid}`
 3. `/login` — email/password; session persists on refresh
 4. `/dashboard` — stat cards (projects, total tasks, by status, overdue), project cards, overdue list
@@ -150,6 +150,14 @@ Copied into `docs/` (original lives as a private claude.ai artifact; there is no
   with `{ status, rank }` (status change = log + owner note as usual), with Undo in the toast (`showToast` returns an id,
   `dismissToast`). New tasks get the bottom rank of To Do; the owner's board ranks old unranked tasks once (`setRanks`).
   Left/Right arrows jump columns by screen position (works in RTL); every card has a "Move to" menu (WCAG 2.5.7).
+- Landing page (added on 2026-10-22, from the Claude Design canvas "TaskFlow landing page"): `pages/Landing.jsx` +
+  `components/landing/` (copy.js = EN/AR text, sections, `landing.css`). The CSS is the one deliberate plain-CSS exception
+  (scroll-driven reveals, looping demos): every rule is scoped under `.lp`, keyframes are `lp-*`, and it reads only the
+  semantic tokens. Every sign-in button links to /login; the auth pages' logo links back to /. The page pitches to
+  users, not reviewers: no security / RTL-engineering sections (Mohammed's call). Sections: hero, numbers, features,
+  how it works, tour, who it's for (`Teams`), why (`Why`, without vs with), FAQ, CTA. Feature and role cards show one
+  at a time in `Rotator` (JS timer, pauses on hover/focus, pause button, starts stopped under reduced motion).
+  Hero has one floating card only (the notification); the Arabic headline has its own mask/underline offsets.
 - Next: phase 10 (delivery). Order: (1) demo script + code-review Q&A prep (explain the Overdue filter:
   `dueDate < today && status !== 'done'`, today = `todayISO()` in Asia/Hebron), (2) 5-8 screenshots in
   `docs/screenshots/` taken by Mohammed in his own browser from the live URL, (3) README LAST (Mohammed's choice):

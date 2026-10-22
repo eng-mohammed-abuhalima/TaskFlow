@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { CircleAlert, MailCheck } from 'lucide-react';
 import { Icon } from '../lib/icons.jsx';
 import { cx } from '../lib/cx.js';
@@ -119,6 +120,8 @@ function BrandPanel({ instant, head, sub }) {
 
 export function AuthLayout({ tagline: [head, sub], children }) {
   const { lang, theme, toggleLang, toggleTheme } = usePrefs();
+  // Arriving from the long landing page must not keep its scroll position.
+  useLayoutEffect(() => { window.scrollTo(0, 0); }, []);
   const wide = useMediaQuery('(min-width: 64rem)');
   const [instant] = useState(() => introPlayed);
 
@@ -134,7 +137,9 @@ export function AuthLayout({ tagline: [head, sub], children }) {
       <main className={authClasses.main}>
         <OfflineBanner className="mb-4 rounded-leaf-sm border" />
         <div className={authClasses.header}>
-          <Logo />
+          <Link to="/" className="rounded-leaf-sm focus-ring" aria-label={lang === 'ar' ? 'الصفحة الرئيسية لـ TaskFlow' : 'TaskFlow home'}>
+            <Logo />
+          </Link>
           <div className="flex items-center gap-1">
             <LanguageSwitch lang={lang} onToggle={toggleLang} />
             <ThemeSwitch theme={theme} lang={lang} onToggle={toggleTheme} />

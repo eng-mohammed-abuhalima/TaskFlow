@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { DirectionProvider } from '@radix-ui/react-direction';
 import { usePrefs } from './context/PreferencesContext.jsx';
@@ -22,10 +23,19 @@ function KeyedById({ page: Page }) {
   return <Page key={id} />;
 }
 
-function HomeRedirect() {
+// Loaded on demand: signed-in users never download the landing page.
+const Landing = lazy(() => import('./pages/Landing.jsx'));
+
+/** "/": signed-in users go straight to their dashboard, visitors see the landing page. */
+function Home() {
   const { user, loading } = useAuth();
   if (loading) return <FullPageLoading />;
-  return <Navigate to={user ? '/dashboard' : '/login'} replace />;
+  if (user) return <Navigate to="/dashboard" replace />;
+  return (
+    <Suspense fallback={<FullPageLoading />}>
+      <Landing />
+    </Suspense>
+  );
 }
 
 export default function App() {
@@ -36,7 +46,7 @@ export default function App() {
       {/* resetKey: moving to another page clears a crash, so one broken page doesn't block the rest */}
       <ErrorBoundary resetKey={pathname}>
       <Routes>
-        <Route path="/" element={<HomeRedirect />} />
+        <Route path="/" element={<Home />} />
 
         <Route element={<PublicOnlyRoute />}>
           <Route path="/login" element={<Login />} />
